@@ -34,6 +34,11 @@ export interface Commit {
   parents: string[];
 }
 
+export interface GitLog {
+  output: string;
+  hasMore: boolean;
+}
+
 export interface RemoteInfo {
   name: string;
   fetchUrl: string;
@@ -61,6 +66,7 @@ export type Request =
   | { command: 'snapshot' | 'branches' | 'remotes' | 'close' }
   | { command: 'diff'; path: string; staged: boolean }
   | { command: 'history'; offset: number; all: boolean }
+  | { command: 'gitLog'; limit: number; all: boolean }
   | { command: 'commitPatch'; oid: string }
   | { command: 'mutate'; action: Mutation };
 

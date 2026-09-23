@@ -135,3 +135,11 @@ export const demoHistory: Commit[] = [
 export const demoRemotes: RemoteInfo[] = [
   { name: 'origin', fetchUrl: 'git@github.com:example/gitpane.git', pushUrl: null },
 ];
+
+export const demoGitLog = `* a7d23f1 (HEAD -> feat/workspace) feat: remember the last opened workspace  [Alex Chen · 2026-09-23]
+*   f02b581 merge: integrate history graph  [Alex Chen · 2026-09-22]
+|\\
+| * d319a44 (tag: v0.1.0, origin/feat/graph, feat/graph) feat: draw branch and merge lanes  [Sam Lin · 2026-09-22]
+* | 8be043d (origin/feat/workspace) feat: add keyboard navigation  [Alex Chen · 2026-09-22]
+|/
+* 391ad6e (main) chore: initialize GitPane  [Alex Chen · 2026-09-21]`;

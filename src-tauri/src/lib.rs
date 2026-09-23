@@ -26,6 +26,7 @@ enum Request {
     Diff { path: String, staged: bool },
     Mutate { action: git::Mutation },
     History { offset: usize, all: bool },
+    GitLog { limit: usize, all: bool },
     Branches,
     Remotes,
     CommitPatch { oid: String },
@@ -103,6 +104,7 @@ async fn git_request(
             Request::History { offset, all } => {
                 serde_json::to_value(git::history(root, offset, all)?)
             }
+            Request::GitLog { limit, all } => serde_json::to_value(git::git_log(root, limit, all)?),
             Request::Branches => serde_json::to_value(git::branches(root)?),
             Request::Remotes => serde_json::to_value(git::remotes(root)?),
             Request::CommitPatch { oid } => serde_json::to_value(git::commit_patch(root, &oid)?),

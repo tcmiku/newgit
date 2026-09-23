@@ -30,11 +30,12 @@
     FileCode,
   } from 'phosphor-svelte';
   import GraphView from './components/GraphView.svelte';
+  import GitLogView from './components/GitLogView.svelte';
   import RemoteSettings from './components/RemoteSettings.svelte';
   import DiffView from './components/DiffView.svelte';
   import { request, native, readSetting, saveSetting } from './lib/api';
   import { basename, isStaged, isUnstaged } from './lib/types';
-  import type { Snapshot, FileChange, Diff, Commit, Branch, Mutation, RemoteInfo } from './lib/types';
+  import type { Snapshot, FileChange, Diff, Commit, GitLog, Branch, Mutation, RemoteInfo } from './lib/types';
 
   let repo = $state<Snapshot | null>(null);
   let selected = $state<{ path: string; staged: boolean } | null>(null);
@@ -50,6 +51,10 @@
   let recents = $state<string[]>(readSetting<string[]>('recents', []));
   let history = $state<Commit[]>([]);
   let historyLoading = $state(false);
+  let historyMode = $state<'graph' | 'log'>('graph');
+  let gitLog = $state<GitLog>({ output: '', hasMore: false });
+  let gitLogLoading = $state(false);
+  let gitLogLimit = $state(100);
   let hasMore = $state(false);
   let currentCommit = $state<Commit | null>(null);
   let allHistory = $state(true);
@@ -70,6 +75,7 @@
   let dialogElement = $state<HTMLDivElement>();
   let diffSequence = 0;
   let historySequence = 0;
+  let gitLogSequence = 0;
   let toastTimer: ReturnType<typeof setTimeout>;
   let refreshTimer: ReturnType<typeof setTimeout>;
   const mac = navigator.userAgent.includes('Mac');
@@ -151,6 +157,7 @@
       const next = await request<Snapshot>({ command: 'open', path }, null);
       diffSequence++;
       historySequence++;
+      gitLogSequence++;
       demo = false;
       repo = next;
       remotes = [];
@@ -158,6 +165,9 @@
       selected = null;
       diff = null;
       history = [];
+      gitLog = { output: '', hasMore: false };
+      gitLogLimit = 100;
+      historyMode = 'graph';
       currentCommit = null;
       view = 'changes';
       filter = '';
@@ -191,6 +201,7 @@
     const { demoSnapshot } = await import('./lib/demo');
     diffSequence++;
     historySequence++;
+    gitLogSequence++;
     demo = true;
     repo = structuredClone(demoSnapshot);
     await loadRemotes();
@@ -198,6 +209,9 @@
     diff = null;
     view = 'changes';
     history = [];
+    gitLog = { output: '', hasMore: false };
+    gitLogLimit = 100;
+    historyMode = 'graph';
     currentCommit = null;
     modal = null;
     commitMessage = '';
@@ -258,7 +272,10 @@
       repo = next;
       await loadRemotes();
       chooseNextFile();
-      if (view === 'history') void loadHistory();
+      if (view === 'history') {
+        void loadHistory();
+        if (historyMode === 'log') void loadGitLog();
+      }
       refreshedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       notify(String(e), true);
@@ -316,8 +333,10 @@
     currentCommit = null;
     view = next;
     filter = '';
-    if (next === 'history') await loadHistory();
-    else chooseNextFile();
+    if (next === 'history') {
+      await loadHistory();
+      if (historyMode === 'log') await loadGitLog();
+    } else chooseNextFile();
   }
 
   async function loadHistory(more = false) {
@@ -348,6 +367,38 @@
     } finally {
       if (sequence === historySequence) historyLoading = false;
     }
+  }
+
+  async function loadGitLog(limit = gitLogLimit) {
+    if (!repo) return;
+    const sequence = ++gitLogSequence;
+    const root = repo.root;
+    gitLogLoading = true;
+    try {
+      const result = demo
+        ? { output: (await import('./lib/demo')).demoGitLog, hasMore: false }
+        : await request<GitLog>({ command: 'gitLog', limit, all: allHistory }, root);
+      if (sequence !== gitLogSequence || repo?.root !== root || view !== 'history' || historyMode !== 'log')
+        return;
+      gitLog = result;
+      gitLogLimit = limit;
+    } catch (e) {
+      if (sequence === gitLogSequence) notify(String(e), true);
+    } finally {
+      if (sequence === gitLogSequence) gitLogLoading = false;
+    }
+  }
+
+  async function openGitLog() {
+    if (!repo) return;
+    if (view !== 'history') await changeView('history');
+    historyMode = 'log';
+    await loadGitLog();
+  }
+
+  function changeHistoryScope() {
+    void loadHistory();
+    if (historyMode === 'log') void loadGitLog();
   }
 
   async function selectCommit(item: Commit) {
@@ -385,6 +436,7 @@
     currentCommit = null;
     diffSequence++;
     historySequence++;
+    gitLogSequence++;
     modal = null;
     saveSetting('last-repository', null);
   }
@@ -394,6 +446,7 @@
     { label: '刷新仓库状态', key: `${mod} R`, run: refresh },
     { label: '查看变更', key: `${mod} ⇧ G`, run: () => changeView('changes') },
     { label: '查看提交历史', key: '', run: () => changeView('history') },
+    { label: '打开 Git 日志', key: '', run: openGitLog },
     { label: '远程仓库设置', key: '', run: () => showModal('remotes') },
     { label: '切换分支', key: '', run: () => showModal('branches') },
     { label: '切换明暗主题', key: '', run: () => (theme = theme === 'dark' ? 'light' : 'dark') },
@@ -616,18 +669,33 @@
       <div class="workspace-content" class:history-workspace={view === 'history'}>
         {#if view === 'history'}
           {#key repo.root}
-            <GraphView
-              commits={history}
-              selected={currentCommit?.oid ?? null}
-              loading={historyLoading}
-              {hasMore}
-              remoteNames={remotes.map((remote) => remote.name)}
-              bind:all={allHistory}
-              onselect={selectCommit}
-              onmore={() => loadHistory(true)}
-              onscope={() => loadHistory()}
-              onrefresh={() => loadHistory()}
-            />
+            {#if historyMode === 'graph'}
+              <GraphView
+                commits={history}
+                selected={currentCommit?.oid ?? null}
+                loading={historyLoading}
+                {hasMore}
+                remoteNames={remotes.map((remote) => remote.name)}
+                bind:all={allHistory}
+                onselect={selectCommit}
+                onmore={() => loadHistory(true)}
+                onscope={changeHistoryScope}
+                onrefresh={() => loadHistory()}
+                onlog={openGitLog}
+              />
+            {:else}
+              <GitLogView
+                output={gitLog.output}
+                loading={gitLogLoading}
+                hasMore={gitLog.hasMore}
+                limit={gitLogLimit}
+                bind:all={allHistory}
+                ongraph={() => (historyMode = 'graph')}
+                onscope={changeHistoryScope}
+                onrefresh={() => loadGitLog()}
+                onmore={() => loadGitLog(Math.min(gitLogLimit + 100, 5000))}
+              />
+            {/if}
           {/key}
         {:else}
           <aside class="source-panel">
@@ -647,7 +715,9 @@
             </div>
             <div class="source-tabs">
               <button class:active={view === 'changes'} onclick={() => changeView('changes')}>变更</button
-              ><button onclick={() => changeView('history')}>提交图</button>
+              ><button onclick={() => changeView('history')}>提交图</button><button onclick={openGitLog}
+                >Git 日志</button
+              >
             </div>
             {#if view === 'changes'}
               <div class="commit-box">

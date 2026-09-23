@@ -55,6 +55,13 @@ pub struct Commit {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitLog {
+    pub output: String,
+    pub has_more: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteInfo {
     pub name: String,
     pub fetch_url: String,
@@ -727,6 +734,56 @@ pub fn history(root: &Path, offset: usize, all: bool) -> GitResult<Vec<Commit>> 
             parents: f[6].split_whitespace().map(str::to_string).collect(),
         })
         .collect())
+}
+
+pub fn git_log(root: &Path, limit: usize, all: bool) -> GitResult<GitLog> {
+    let has_head = command(root, &["rev-parse", "--verify", "HEAD"], None).is_ok();
+    if !has_head && (!all || command(root, &["show-ref", "--quiet"], None).is_err()) {
+        return Ok(GitLog {
+            output: String::new(),
+            has_more: false,
+        });
+    }
+
+    let limit = limit.clamp(1, 5000);
+    let count_limit = format!("--max-count={}", limit + 1);
+    let mut count_args = vec!["rev-list", "--count", &count_limit];
+    if all {
+        count_args.push("--all");
+        if has_head {
+            count_args.push("HEAD");
+        }
+    } else {
+        count_args.push("HEAD");
+    }
+    let count = text(root, &count_args)?
+        .trim()
+        .parse::<usize>()
+        .map_err(|e| e.to_string())?;
+
+    let max_count = format!("--max-count={limit}");
+    let mut args = vec![
+        "log",
+        "--graph",
+        "--topo-order",
+        "--decorate=short",
+        "--date=short",
+        "--no-color",
+        &max_count,
+        "--pretty=format:%h %d %s  [%an · %ad]",
+    ];
+    if all {
+        args.push("--all");
+        if has_head {
+            args.push("HEAD");
+        }
+    } else {
+        args.push("HEAD");
+    }
+    Ok(GitLog {
+        output: text(root, &args)?,
+        has_more: count > limit,
+    })
 }
 
 pub fn branches(root: &Path) -> GitResult<Vec<Branch>> {

@@ -14,6 +14,7 @@
     onmore,
     onscope,
     onrefresh,
+    onlog,
   }: {
     commits: Commit[];
     selected: string | null;
@@ -25,6 +26,7 @@
     onmore: () => void;
     onscope: () => void;
     onrefresh: () => void;
+    onlog: () => void;
   } = $props();
 
   let search = $state('');
@@ -75,6 +77,7 @@
       <h2>提交图</h2>
     </div>
     <div class="graph-options">
+      <button class="graph-log-link" onclick={onlog}>打开 Git 日志</button>
       <label for="graph-scope">显示</label>
       <select id="graph-scope" bind:value={all} onchange={onscope}>
         <option value={true}>所有分支</option>
@@ -216,6 +219,14 @@
     gap: 8px;
     font-size: 11px;
     color: var(--muted);
+  }
+  .graph-log-link {
+    padding: 6px 8px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+  .graph-log-link:hover {
+    background: var(--hover);
   }
   .graph-options select {
     width: 105px;

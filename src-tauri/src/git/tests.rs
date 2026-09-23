@@ -328,6 +328,33 @@ fn history_can_include_non_current_branches() {
 }
 
 #[test]
+fn git_log_shows_native_graph_and_respects_scope_and_limit() {
+    let dir = repo();
+    let root = dir.path();
+    assert!(git_log(root, 100, false).unwrap().output.is_empty());
+    write(root, "base.txt", "base\n");
+    stage(root, &["base.txt"]);
+    commit(root);
+    command(root, &["switch", "-c", "side"], None).unwrap();
+    write(root, "side.txt", "side\n");
+    stage(root, &["side.txt"]);
+    commit(root);
+    command(root, &["switch", "main"], None).unwrap();
+
+    let current = git_log(root, 100, false).unwrap();
+    assert!(current.output.contains("test: initial state"));
+    assert!(!current.output.contains("side"));
+    assert!(current.output.starts_with('*'));
+    let all = git_log(root, 1, true).unwrap();
+    assert!(all.has_more);
+    assert!(all.output.contains("side"));
+    let expanded = git_log(root, 100, true).unwrap();
+    assert!(!expanded.has_more);
+    assert!(expanded.output.contains("main"));
+    assert!(expanded.output.contains("side"));
+}
+
+#[test]
 fn local_remote_configuration_and_publish_round_trip() {
     let dir = repo();
     let root = dir.path();
