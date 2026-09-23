@@ -50,6 +50,15 @@ pub struct Commit {
     pub author: String,
     pub date: String,
     pub refs: String,
+    pub parents: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteInfo {
+    pub name: String,
+    pub fetch_url: String,
+    pub push_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -81,6 +90,27 @@ pub enum Mutation {
     },
     Remote {
         operation: String,
+        remote: Option<String>,
+    },
+    AddRemote {
+        name: String,
+        fetch_url: String,
+        push_url: Option<String>,
+    },
+    SetRemote {
+        name: String,
+        fetch_url: String,
+        push_url: Option<String>,
+    },
+    RenameRemote {
+        old_name: String,
+        new_name: String,
+    },
+    RemoveRemote {
+        name: String,
+    },
+    PublishBranch {
+        remote: String,
     },
 }
 
@@ -423,6 +453,61 @@ fn selected_paths(
     Ok(paths)
 }
 
+fn remote_name(root: &Path, name: &str) -> GitResult<()> {
+    if name.is_empty() || name.starts_with('-') || name.contains('\0') {
+        return Err("远程名称无效。".into());
+    }
+    let reference = format!("refs/remotes/{name}/branch");
+    command(root, &["check-ref-format", &reference], None)
+        .map(|_| ())
+        .map_err(|_| "远程名称无效。".into())
+}
+
+fn remote_url(url: &str) -> GitResult<()> {
+    if url.trim().is_empty() || url.len() > 4096 || url.contains(['\0', '\r', '\n']) {
+        return Err("请填写有效的远程地址。".into());
+    }
+    Ok(())
+}
+
+fn explicit_push_urls(root: &Path, name: &str) -> GitResult<Vec<String>> {
+    remote_name(root, name)?;
+    let key = format!("remote.{name}.pushurl");
+    Ok(text(root, &["config", "--get-all", &key])
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect())
+}
+
+pub fn remotes(root: &Path) -> GitResult<Vec<RemoteInfo>> {
+    let names = text(root, &["remote"])?;
+    names
+        .lines()
+        .map(|name| {
+            remote_name(root, name)?;
+            let key = format!("remote.{name}.url");
+            let fetch_url = text(root, &["config", "--get", &key])?
+                .trim_end()
+                .to_string();
+            let push_url = explicit_push_urls(root, name)?.into_iter().next();
+            Ok(RemoteInfo {
+                name: name.into(),
+                fetch_url,
+                push_url,
+            })
+        })
+        .collect()
+}
+
+fn existing_remote(root: &Path, name: &str) -> GitResult<()> {
+    remote_name(root, name)?;
+    if !remotes(root)?.iter().any(|remote| remote.name == name) {
+        return Err(format!("远程 {name} 已不存在，请刷新后重试。"));
+    }
+    Ok(())
+}
+
 pub fn mutate(root: &Path, action: Mutation) -> GitResult<String> {
     match action {
         Mutation::Stage { paths } => {
@@ -505,37 +590,127 @@ pub fn mutate(root: &Path, action: Mutation) -> GitResult<String> {
             command(root, &args, None)?;
             Ok(format!("已切换到 {name}"))
         }
-        Mutation::Remote { operation } => {
+        Mutation::Remote { operation, remote } => {
+            if let Some(ref name) = remote {
+                existing_remote(root, name)?;
+            }
             let args = match operation.as_str() {
-                "fetch" => vec!["fetch"],
-                "pull" => vec!["pull", "--ff-only"],
-                "push" => vec!["push"],
+                "fetch" => {
+                    if let Some(name) = remote.as_deref() {
+                        vec!["fetch", "--", name]
+                    } else {
+                        vec!["fetch", "--all"]
+                    }
+                }
+                "pull" if remote.is_none() => vec!["pull", "--ff-only"],
+                "push" if remote.is_none() => vec!["push"],
                 _ => return Err("不支持的远程操作。".into()),
             };
             command(root, &args, None)?;
             Ok(format!("{operation} 完成"))
         }
+        Mutation::AddRemote {
+            name,
+            fetch_url,
+            push_url,
+        } => {
+            remote_name(root, &name)?;
+            remote_url(&fetch_url)?;
+            if let Some(ref push) = push_url {
+                remote_url(push)?;
+            }
+            command(root, &["remote", "add", "--", &name, &fetch_url], None)?;
+            if let Some(push) = push_url {
+                command(
+                    root,
+                    &["remote", "set-url", "--push", "--", &name, &push],
+                    None,
+                )?;
+            }
+            Ok(format!("已添加远程 {name}"))
+        }
+        Mutation::SetRemote {
+            name,
+            fetch_url,
+            push_url,
+        } => {
+            existing_remote(root, &name)?;
+            remote_url(&fetch_url)?;
+            if let Some(ref push) = push_url {
+                remote_url(push)?;
+            }
+            let old_push = explicit_push_urls(root, &name)?;
+            if old_push.len() > 1 {
+                return Err("该远程配置了多个推送地址，请用 Git 命令行管理。".into());
+            }
+            command(root, &["remote", "set-url", "--", &name, &fetch_url], None)?;
+            if let Some(push) = push_url {
+                command(
+                    root,
+                    &["remote", "set-url", "--push", "--", &name, &push],
+                    None,
+                )?;
+            } else if !old_push.is_empty() {
+                let key = format!("remote.{name}.pushurl");
+                command(root, &["config", "--unset-all", &key], None)?;
+            }
+            Ok(format!("已更新远程 {name}"))
+        }
+        Mutation::RenameRemote { old_name, new_name } => {
+            existing_remote(root, &old_name)?;
+            remote_name(root, &new_name)?;
+            command(
+                root,
+                &["remote", "rename", "--", &old_name, &new_name],
+                None,
+            )?;
+            Ok(format!("已将远程 {old_name} 重命名为 {new_name}"))
+        }
+        Mutation::RemoveRemote { name } => {
+            existing_remote(root, &name)?;
+            command(root, &["remote", "remove", "--", &name], None)?;
+            Ok(format!("已移除远程 {name}"))
+        }
+        Mutation::PublishBranch { remote } => {
+            existing_remote(root, &remote)?;
+            command(root, &["rev-parse", "--verify", "HEAD"], None)
+                .map_err(|_| "请先创建一次提交，再发布分支。")?;
+            let branch = text(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+                .map_err(|_| "当前处于 detached HEAD，无法发布分支。")?;
+            let branch = branch.trim();
+            command(
+                root,
+                &["push", "--set-upstream", "--", &remote, branch],
+                None,
+            )?;
+            Ok(format!("已将 {branch} 发布到 {remote} 并设置跟踪分支"))
+        }
     }
 }
 
-pub fn history(root: &Path, offset: usize) -> GitResult<Vec<Commit>> {
-    if command(root, &["rev-parse", "--verify", "HEAD"], None).is_err() {
+pub fn history(root: &Path, offset: usize, all: bool) -> GitResult<Vec<Commit>> {
+    if !all && command(root, &["rev-parse", "--verify", "HEAD"], None).is_err() {
         return Ok(Vec::new());
     }
     let skip = format!("--skip={}", offset.min(1_000_000));
-    let raw = text(
-        root,
-        &[
-            "log",
-            "-z",
-            "--max-count=60",
-            &skip,
-            "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%D",
-        ],
-    )?;
+    let mut args = vec![
+        "log",
+        "--topo-order",
+        "-z",
+        "--max-count=60",
+        &skip,
+        "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%D%x00%P",
+    ];
+    if all {
+        args.push("--all");
+        if command(root, &["rev-parse", "--verify", "HEAD"], None).is_ok() {
+            args.push("HEAD");
+        }
+    }
+    let raw = text(root, &args)?;
     let fields: Vec<&str> = raw.split('\0').collect();
     Ok(fields
-        .chunks_exact(6)
+        .chunks_exact(7)
         .map(|f| Commit {
             oid: f[0].into(),
             short: f[1].into(),
@@ -543,6 +718,7 @@ pub fn history(root: &Path, offset: usize) -> GitResult<Vec<Commit>> {
             author: f[3].into(),
             date: f[4].into(),
             refs: f[5].into(),
+            parents: f[6].split_whitespace().map(str::to_string).collect(),
         })
         .collect())
 }
@@ -582,6 +758,7 @@ pub fn commit_patch(root: &Path, oid: &str) -> GitResult<Diff> {
             "--no-color",
             "--stat",
             "--patch",
+            "--diff-merges=first-parent",
             oid,
             "--",
         ],

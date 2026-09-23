@@ -31,6 +31,13 @@ export interface Commit {
   author: string;
   date: string;
   refs: string;
+  parents: string[];
+}
+
+export interface RemoteInfo {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string | null;
 }
 
 export interface Branch {
@@ -43,13 +50,17 @@ export type Mutation =
   | { kind: 'stageHunk'; path: string; expected: string; hunk: number }
   | { kind: 'commit'; message: string }
   | { kind: 'switchBranch'; name: string; create: boolean }
-  | { kind: 'remote'; operation: 'fetch' | 'pull' | 'push' };
+  | { kind: 'remote'; operation: 'fetch' | 'pull' | 'push'; remote?: string }
+  | { kind: 'addRemote' | 'setRemote'; name: string; fetchUrl: string; pushUrl: string | null }
+  | { kind: 'renameRemote'; oldName: string; newName: string }
+  | { kind: 'removeRemote'; name: string }
+  | { kind: 'publishBranch'; remote: string };
 
 export type Request =
   | { command: 'open'; path: string }
-  | { command: 'snapshot' | 'branches' | 'close' }
+  | { command: 'snapshot' | 'branches' | 'remotes' | 'close' }
   | { command: 'diff'; path: string; staged: boolean }
-  | { command: 'history'; offset: number }
+  | { command: 'history'; offset: number; all: boolean }
   | { command: 'commitPatch'; oid: string }
   | { command: 'mutate'; action: Mutation };
 

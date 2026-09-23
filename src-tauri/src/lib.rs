@@ -25,8 +25,9 @@ enum Request {
     Snapshot,
     Diff { path: String, staged: bool },
     Mutate { action: git::Mutation },
-    History { offset: usize },
+    History { offset: usize, all: bool },
     Branches,
+    Remotes,
     CommitPatch { oid: String },
 }
 
@@ -99,8 +100,11 @@ async fn git_request(
             Request::Snapshot => serde_json::to_value(git::snapshot(root)?),
             Request::Diff { path, staged } => serde_json::to_value(git::diff(root, &path, staged)?),
             Request::Mutate { action } => serde_json::to_value(git::mutate(root, action)?),
-            Request::History { offset } => serde_json::to_value(git::history(root, offset)?),
+            Request::History { offset, all } => {
+                serde_json::to_value(git::history(root, offset, all)?)
+            }
             Request::Branches => serde_json::to_value(git::branches(root)?),
+            Request::Remotes => serde_json::to_value(git::remotes(root)?),
             Request::CommitPatch { oid } => serde_json::to_value(git::commit_patch(root, &oid)?),
             Request::Open { .. } | Request::Close => unreachable!(),
         };

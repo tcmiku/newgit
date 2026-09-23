@@ -92,6 +92,7 @@ export const demoHistory: Commit[] = [
     author: 'Alex Chen',
     date: '2026-09-23T10:24:00+08:00',
     refs: 'HEAD -> feat/workspace',
+    parents: ['f02b5810000000000000000000000000000000000'],
   },
   {
     oid: 'f02b5810000000000000000000000000000000000',
@@ -100,6 +101,7 @@ export const demoHistory: Commit[] = [
     author: 'Alex Chen',
     date: '2026-09-22T16:40:00+08:00',
     refs: '',
+    parents: ['8be043d0000000000000000000000000000000000'],
   },
   {
     oid: '8be043d0000000000000000000000000000000000',
@@ -108,6 +110,7 @@ export const demoHistory: Commit[] = [
     author: 'Alex Chen',
     date: '2026-09-22T09:10:00+08:00',
     refs: 'origin/feat/workspace',
+    parents: ['391ad6e0000000000000000000000000000000000'],
   },
   {
     oid: '391ad6e0000000000000000000000000000000000',
@@ -116,5 +119,6 @@ export const demoHistory: Commit[] = [
     author: 'Alex Chen',
     date: '2026-09-21T11:30:00+08:00',
     refs: 'main',
+    parents: [],
   },
 ];

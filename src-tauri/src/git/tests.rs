@@ -98,10 +98,10 @@ fn commit_includes_only_staged_content_and_history() {
     let state = snapshot(root).unwrap();
     assert_eq!(state.branch, "main");
     assert_eq!(state.files[0].worktree, 'M');
-    let log = history(root, 0).unwrap();
+    let log = history(root, 0, false).unwrap();
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].subject, "test: initial state");
-    assert!(history(root, 60).unwrap().is_empty());
+    assert!(history(root, 60, false).unwrap().is_empty());
     assert!(commit_patch(root, &log[0].oid)
         .unwrap()
         .patch
@@ -297,4 +297,176 @@ fn conflicts_block_commit_until_explicitly_staged() {
     stage(root, &["a.txt"]);
     commit(root);
     assert!(!snapshot(root).unwrap().merging);
+    let graph = history(root, 0, true).unwrap();
+    assert_eq!(graph[0].parents.len(), 2);
+    assert!(commit_patch(root, &graph[0].oid)
+        .unwrap()
+        .patch
+        .contains("resolved"));
+}
+
+#[test]
+fn history_can_include_non_current_branches() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "base\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    command(root, &["switch", "-c", "side"], None).unwrap();
+    write(root, "side.txt", "side\n");
+    stage(root, &["side.txt"]);
+    commit(root);
+    command(root, &["switch", "main"], None).unwrap();
+    let current = history(root, 0, false).unwrap();
+    let all = history(root, 0, true).unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(all.len(), 2);
+    assert!(all.iter().any(|entry| entry.refs.contains("side")));
+    assert!(all
+        .iter()
+        .any(|entry| entry.parents.contains(&current[0].oid)));
+}
+
+#[test]
+fn local_remote_configuration_and_publish_round_trip() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "base\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    let remote = tempfile::tempdir().unwrap();
+    command(remote.path(), &["init", "--bare"], None).unwrap();
+    let address = remote.path().to_str().unwrap().to_string();
+    mutate(
+        root,
+        Mutation::AddRemote {
+            name: "origin".into(),
+            fetch_url: address.clone(),
+            push_url: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(remotes(root).unwrap()[0].fetch_url, address);
+    mutate(
+        root,
+        Mutation::PublishBranch {
+            remote: "origin".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        snapshot(root).unwrap().upstream.as_deref(),
+        Some("origin/main")
+    );
+    mutate(
+        root,
+        Mutation::Remote {
+            operation: "fetch".into(),
+            remote: Some("origin".into()),
+        },
+    )
+    .unwrap();
+
+    let alternative = tempfile::tempdir().unwrap();
+    command(alternative.path(), &["init", "--bare"], None).unwrap();
+    let alternative_address = alternative.path().to_str().unwrap().to_string();
+    mutate(
+        root,
+        Mutation::SetRemote {
+            name: "origin".into(),
+            fetch_url: alternative_address.clone(),
+            push_url: Some(address.clone()),
+        },
+    )
+    .unwrap();
+    assert_eq!(remotes(root).unwrap()[0].fetch_url, alternative_address);
+    assert_eq!(
+        remotes(root).unwrap()[0].push_url.as_deref(),
+        Some(address.as_str())
+    );
+    mutate(
+        root,
+        Mutation::RenameRemote {
+            old_name: "origin".into(),
+            new_name: "backup".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(remotes(root).unwrap()[0].name, "backup");
+    mutate(
+        root,
+        Mutation::SetRemote {
+            name: "backup".into(),
+            fetch_url: address,
+            push_url: None,
+        },
+    )
+    .unwrap();
+    assert!(remotes(root).unwrap()[0].push_url.is_none());
+    mutate(
+        root,
+        Mutation::RemoveRemote {
+            name: "backup".into(),
+        },
+    )
+    .unwrap();
+    assert!(remotes(root).unwrap().is_empty());
+}
+
+#[test]
+fn remote_names_urls_and_multiple_push_urls_are_guarded() {
+    let dir = repo();
+    let root = dir.path();
+    assert!(mutate(
+        root,
+        Mutation::AddRemote {
+            name: "--help".into(),
+            fetch_url: "https://example.com/repo".into(),
+            push_url: None
+        }
+    )
+    .is_err());
+    assert!(mutate(
+        root,
+        Mutation::AddRemote {
+            name: "origin".into(),
+            fetch_url: "\n[core]\n".into(),
+            push_url: None
+        }
+    )
+    .is_err());
+    mutate(
+        root,
+        Mutation::AddRemote {
+            name: "origin".into(),
+            fetch_url: "https://example.com/repo".into(),
+            push_url: None,
+        },
+    )
+    .unwrap();
+    command(
+        root,
+        &["config", "--add", "remote.origin.pushurl", "one"],
+        None,
+    )
+    .unwrap();
+    command(
+        root,
+        &["config", "--add", "remote.origin.pushurl", "two"],
+        None,
+    )
+    .unwrap();
+    assert!(mutate(
+        root,
+        Mutation::SetRemote {
+            name: "origin".into(),
+            fetch_url: "https://example.com/new".into(),
+            push_url: None
+        }
+    )
+    .is_err());
+    assert_eq!(
+        remotes(root).unwrap()[0].fetch_url,
+        "https://example.com/repo"
+    );
 }
