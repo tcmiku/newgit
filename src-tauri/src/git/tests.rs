@@ -1,0 +1,300 @@
+use super::*;
+use tempfile::TempDir;
+
+fn repo() -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    command(dir.path(), &["init", "-b", "main"], None).unwrap();
+    command(dir.path(), &["config", "user.name", "GitPane Test"], None).unwrap();
+    command(
+        dir.path(),
+        &["config", "user.email", "test@gitpane.invalid"],
+        None,
+    )
+    .unwrap();
+    command(dir.path(), &["config", "commit.gpgsign", "false"], None).unwrap();
+    command(dir.path(), &["config", "core.autocrlf", "false"], None).unwrap();
+    std::fs::create_dir(dir.path().join(".hooks")).unwrap();
+    command(
+        dir.path(),
+        &[
+            "config",
+            "core.hooksPath",
+            dir.path().join(".hooks").to_str().unwrap(),
+        ],
+        None,
+    )
+    .unwrap();
+    dir
+}
+
+fn write(root: &Path, name: &str, content: &str) {
+    std::fs::write(root.join(name), content).unwrap();
+}
+
+fn stage(root: &Path, names: &[&str]) {
+    mutate(
+        root,
+        Mutation::Stage {
+            paths: names.iter().map(|s| s.to_string()).collect(),
+        },
+    )
+    .unwrap();
+}
+
+fn commit(root: &Path) {
+    mutate(
+        root,
+        Mutation::Commit {
+            message: "test: initial state".into(),
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn parse_renames_spaces_unicode_and_conflicts() {
+    let changes = parse_status(
+        "R  新 name.ts\0old name.ts\0 M file [1].ts\0UU conflict.ts\0?? fresh.ts\0".as_bytes(),
+    )
+    .unwrap();
+    assert_eq!(changes.len(), 4);
+    assert_eq!(changes[0].original_path.as_deref(), Some("old name.ts"));
+    assert_eq!(changes[0].path, "新 name.ts");
+    assert!(changes[2].conflict);
+}
+
+#[test]
+fn unborn_unstage_preserves_worktree_and_literal_paths() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "file [1].txt", "hello\n");
+    write(root, "file 1.txt", "other\n");
+    stage(root, &["file [1].txt"]);
+    let staged = files(root).unwrap();
+    assert_eq!(staged.iter().filter(|f| f.index == 'A').count(), 1);
+    mutate(
+        root,
+        Mutation::Unstage {
+            paths: vec!["file [1].txt".into()],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(root.join("file [1].txt")).unwrap(),
+        "hello\n"
+    );
+    assert!(files(root).unwrap().iter().all(|f| f.index == '?'));
+}
+
+#[test]
+fn commit_includes_only_staged_content_and_history() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "first\n");
+    stage(root, &["a.txt"]);
+    write(root, "a.txt", "second\n");
+    commit(root);
+    assert_eq!(text(root, &["show", "HEAD:a.txt"]).unwrap(), "first\n");
+    let state = snapshot(root).unwrap();
+    assert_eq!(state.branch, "main");
+    assert_eq!(state.files[0].worktree, 'M');
+    let log = history(root, 0).unwrap();
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].subject, "test: initial state");
+    assert!(history(root, 60).unwrap().is_empty());
+    assert!(commit_patch(root, &log[0].oid)
+        .unwrap()
+        .patch
+        .contains("+first"));
+}
+
+#[test]
+fn stage_one_hunk_and_reject_stale_patch() {
+    let dir = repo();
+    let root = dir.path();
+    let initial = (1..=30).map(|i| format!("line {i}\n")).collect::<String>();
+    write(root, "a.txt", &initial);
+    stage(root, &["a.txt"]);
+    commit(root);
+    let changed = initial
+        .replace("line 2\n", "second line\n")
+        .replace("line 27\n", "last change\n");
+    write(root, "a.txt", &changed);
+    let patch = diff(root, "a.txt", false).unwrap();
+    assert!(patch.can_stage_hunks);
+    mutate(
+        root,
+        Mutation::StageHunk {
+            path: "a.txt".into(),
+            expected: patch.patch.clone(),
+            hunk: 0,
+        },
+    )
+    .unwrap();
+    let cached = text(root, &["show", ":a.txt"]).unwrap();
+    assert!(cached.contains("second line"));
+    assert!(!cached.contains("last change"));
+    assert!(mutate(
+        root,
+        Mutation::StageHunk {
+            path: "a.txt".into(),
+            expected: patch.patch,
+            hunk: 1
+        }
+    )
+    .is_err());
+}
+
+#[test]
+fn unstage_rename_preserves_new_file() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "old.txt", "content\n");
+    stage(root, &["old.txt"]);
+    commit(root);
+    command(root, &["mv", "old.txt", "new.txt"], None).unwrap();
+    mutate(
+        root,
+        Mutation::Unstage {
+            paths: vec!["new.txt".into()],
+        },
+    )
+    .unwrap();
+    assert!(root.join("new.txt").exists());
+    assert!(!root.join("old.txt").exists());
+    assert!(command(root, &["diff", "--cached", "--quiet"], None).is_ok());
+}
+
+#[test]
+fn branch_switch_and_validation() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "hello\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    mutate(
+        root,
+        Mutation::SwitchBranch {
+            name: "feature/test".into(),
+            create: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(snapshot(root).unwrap().branch, "feature/test");
+    assert_eq!(branches(root).unwrap().len(), 2);
+    assert!(mutate(
+        root,
+        Mutation::SwitchBranch {
+            name: "--detach".into(),
+            create: false
+        }
+    )
+    .is_err());
+    assert!(diff(root, "../outside.txt", false).is_err());
+}
+
+#[test]
+fn binary_and_large_files_do_not_render_as_text() {
+    let dir = repo();
+    let root = dir.path();
+    std::fs::write(root.join("binary.bin"), [0, 1, 2, 3]).unwrap();
+    assert!(diff(root, "binary.bin", false).unwrap().binary);
+    std::fs::write(root.join("large.txt"), vec![b'a'; 1024 * 1024 + 1]).unwrap();
+    assert!(diff(root, "large.txt", false).unwrap().truncated);
+}
+
+#[test]
+fn empty_commit_is_rejected() {
+    let dir = repo();
+    assert!(mutate(
+        dir.path(),
+        Mutation::Commit {
+            message: String::new()
+        }
+    )
+    .is_err());
+    assert!(mutate(
+        dir.path(),
+        Mutation::Commit {
+            message: "nothing staged".into()
+        }
+    )
+    .is_err());
+}
+
+#[test]
+fn stage_modified_rename_does_not_address_deleted_source() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "old.txt", "one\ntwo\nthree\nfour\n");
+    stage(root, &["old.txt"]);
+    commit(root);
+    command(root, &["mv", "old.txt", "new.txt"], None).unwrap();
+    write(root, "new.txt", "one\ntwo\nthree\nfour\nfive\n");
+    stage(root, &["new.txt"]);
+    assert_eq!(
+        text(root, &["show", ":new.txt"]).unwrap(),
+        "one\ntwo\nthree\nfour\nfive\n"
+    );
+}
+
+#[test]
+fn linked_worktree_is_supported() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "hello\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    let worktree = tempfile::tempdir().unwrap();
+    let workpath = worktree.path().join("linked");
+    command(
+        root,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "linked",
+            workpath.to_str().unwrap(),
+        ],
+        None,
+    )
+    .unwrap();
+    let resolved = open(workpath.to_str().unwrap()).unwrap();
+    assert_eq!(snapshot(&resolved).unwrap().branch, "linked");
+    write(&resolved, "a.txt", "changed\n");
+    assert!(diff(&resolved, "a.txt", false)
+        .unwrap()
+        .patch
+        .contains("+changed"));
+    assert!(git_dir(&resolved).unwrap().is_dir());
+}
+
+#[test]
+fn conflicts_block_commit_until_explicitly_staged() {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.txt", "base\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    command(root, &["switch", "-c", "other"], None).unwrap();
+    write(root, "a.txt", "other\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    command(root, &["switch", "main"], None).unwrap();
+    write(root, "a.txt", "main\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    assert!(command(root, &["merge", "other"], None).is_err());
+    assert!(snapshot(root).unwrap().files[0].conflict);
+    assert!(mutate(
+        root,
+        Mutation::Commit {
+            message: "must fail".into()
+        }
+    )
+    .is_err());
+    write(root, "a.txt", "resolved\n");
+    stage(root, &["a.txt"]);
+    commit(root);
+    assert!(!snapshot(root).unwrap().merging);
+}

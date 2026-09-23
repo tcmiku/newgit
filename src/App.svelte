@@ -1,0 +1,1006 @@
+<script lang="ts">
+  import { onMount, tick } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
+  import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { open as chooseDirectory } from '@tauri-apps/plugin-dialog';
+  import {
+    GitBranch,
+    GitCommit,
+    FolderOpen,
+    Plus,
+    Minus,
+    ArrowDown,
+    ArrowUp,
+    ArrowsClockwise,
+    CaretDown,
+    CaretRight,
+    Check,
+    ClockCounterClockwise,
+    MagnifyingGlass,
+    Command,
+    X,
+    WarningCircle,
+    Sun,
+    Moon,
+    Keyboard,
+    ArrowRight,
+    CheckCircle,
+    Circle,
+    FileCode,
+  } from 'phosphor-svelte';
+  import DiffView from './components/DiffView.svelte';
+  import { request, native, readSetting, saveSetting } from './lib/api';
+  import { basename, isStaged, isUnstaged } from './lib/types';
+  import type { Snapshot, FileChange, Diff, Commit, Branch, Mutation } from './lib/types';
+
+  let repo = $state<Snapshot | null>(null);
+  let selected = $state<{ path: string; staged: boolean } | null>(null);
+  let diff = $state<Diff | null>(null);
+  let diffLoading = $state(false);
+  let busy = $state('');
+  let refreshing = $state(false);
+  let view = $state<'changes' | 'history'>('changes');
+  let mode = $state(readSetting<string>('diff-mode', 'split'));
+  let theme = $state(readSetting<string>('theme', 'dark'));
+  let filter = $state('');
+  let commitMessage = $state('');
+  let recents = $state<string[]>(readSetting<string[]>('recents', []));
+  let history = $state<Commit[]>([]);
+  let historyLoading = $state(false);
+  let hasMore = $state(false);
+  let currentCommit = $state<Commit | null>(null);
+  let branches = $state<Branch[]>([]);
+  let branchesLoading = $state(false);
+  let modal = $state<'repository' | 'branches' | 'commands' | 'help' | null>(null);
+  let query = $state('');
+  let pathInput = $state('');
+  let newBranch = $state('');
+  let toast = $state<{ text: string; error: boolean } | null>(null);
+  let stagedExpanded = $state(true);
+  let unstagedExpanded = $state(true);
+  let demo = $state(false);
+  let refreshedAt = $state('');
+  let dialogElement = $state<HTMLDivElement>();
+  let diffSequence = 0;
+  let historySequence = 0;
+  let toastTimer: ReturnType<typeof setTimeout>;
+  let refreshTimer: ReturnType<typeof setTimeout>;
+  const mac = navigator.userAgent.includes('Mac');
+  const mod = mac ? '⌘' : 'Ctrl';
+  let staged = $derived(repo?.files.filter(isStaged) ?? []);
+  let unstaged = $derived(repo?.files.filter(isUnstaged) ?? []);
+  let conflicts = $derived(repo?.files.filter((f) => f.conflict).length ?? 0);
+  let filteredStaged = $derived(staged.filter((f) => f.path.toLowerCase().includes(filter.toLowerCase())));
+  let filteredUnstaged = $derived(
+    unstaged.filter((f) => f.path.toLowerCase().includes(filter.toLowerCase())),
+  );
+  let activeFile = $derived(repo?.files.find((f) => f.path === selected?.path));
+
+  $effect(() => {
+    document.documentElement.dataset.theme = theme;
+    saveSetting('theme', theme);
+  });
+  $effect(() => {
+    saveSetting('diff-mode', mode);
+  });
+  $effect(() => {
+    if (repo && !demo) saveSetting(`draft:${repo.root}`, commitMessage);
+  });
+
+  function notify(text: string, error = false) {
+    clearTimeout(toastTimer);
+    toast = { text, error };
+    if (!error) toastTimer = setTimeout(() => (toast = null), 4500);
+  }
+
+  async function showModal(kind: typeof modal) {
+    modal = kind;
+    query = '';
+    newBranch = '';
+    pathInput = '';
+    await tick();
+    dialogElement?.querySelector<HTMLInputElement>('input')?.focus();
+    if (kind === 'branches' && repo) {
+      branchesLoading = true;
+      try {
+        branches = demo
+          ? [
+              { name: 'feat/workspace', current: true },
+              { name: 'main', current: false },
+            ]
+          : await request<Branch[]>({ command: 'branches' }, repo.root);
+      } catch (e) {
+        notify(String(e), true);
+      } finally {
+        branchesLoading = false;
+      }
+    }
+  }
+
+  async function openRepository(path: string) {
+    if (busy) return;
+    busy = '正在打开仓库';
+    modal = null;
+    toast = null;
+    try {
+      const next = await request<Snapshot>({ command: 'open', path }, null);
+      diffSequence++;
+      historySequence++;
+      demo = false;
+      repo = next;
+      selected = null;
+      diff = null;
+      history = [];
+      currentCommit = null;
+      view = 'changes';
+      filter = '';
+      commitMessage = readSetting(`draft:${next.root}`, '');
+      recents = [next.root, ...recents.filter((p) => p !== next.root)].slice(0, 8);
+      saveSetting('recents', recents);
+      saveSetting('last-repository', next.root);
+      chooseNextFile();
+      refreshedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      notify(String(e), true);
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function browse() {
+    if (!native) {
+      notify('浏览器仅支持界面演示。请运行 GitPane 桌面应用来打开本地仓库。');
+      return;
+    }
+    try {
+      const path = await chooseDirectory({ directory: true, multiple: false, title: '选择 Git 仓库' });
+      if (path) await openRepository(path);
+    } catch (e) {
+      notify(String(e), true);
+    }
+  }
+
+  async function loadDemo() {
+    const { demoSnapshot } = await import('./lib/demo');
+    diffSequence++;
+    historySequence++;
+    demo = true;
+    repo = structuredClone(demoSnapshot);
+    selected = null;
+    diff = null;
+    view = 'changes';
+    history = [];
+    currentCommit = null;
+    modal = null;
+    commitMessage = '';
+    toast = null;
+    chooseNextFile();
+  }
+
+  function chooseNextFile() {
+    if (!repo || view !== 'changes') return;
+    if (selected) {
+      const existing = repo.files.find((f) => f.path === selected!.path);
+      if (existing && (selected.staged ? isStaged(existing) : isUnstaged(existing))) {
+        void selectFile(existing, selected.staged);
+        return;
+      }
+      if (existing) {
+        void selectFile(existing, isStaged(existing));
+        return;
+      }
+    }
+    const file = repo.files.find(isUnstaged) ?? repo.files.find(isStaged);
+    if (file) void selectFile(file, !isUnstaged(file));
+    else {
+      selected = null;
+      diff = null;
+      diffLoading = false;
+      diffSequence++;
+    }
+  }
+
+  async function selectFile(file: FileChange, staged: boolean) {
+    if (!repo) return;
+    selected = { path: file.path, staged };
+    currentCommit = null;
+    diff = null;
+    diffLoading = true;
+    const sequence = ++diffSequence,
+      root = repo.root;
+    try {
+      const result = demo
+        ? (await import('./lib/demo')).demoDiff(file.path)
+        : await request<Diff>({ command: 'diff', path: file.path, staged }, root);
+      if (sequence === diffSequence) diff = result;
+    } catch (e) {
+      if (sequence === diffSequence) notify(String(e), true);
+    } finally {
+      if (sequence === diffSequence) diffLoading = false;
+    }
+  }
+
+  async function refresh() {
+    if (!repo || demo || refreshing || busy) return;
+    refreshing = true;
+    const root = repo.root;
+    try {
+      const next = await request<Snapshot>({ command: 'snapshot' }, root);
+      if (repo?.root !== root) return;
+      repo = next;
+      chooseNextFile();
+      if (view === 'history') void loadHistory();
+      refreshedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      notify(String(e), true);
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  async function mutate(action: Mutation, label: string) {
+    if (!repo || busy || refreshing) return;
+    if (demo) {
+      notify('当前是只读演示，请打开本地仓库以执行 Git 操作。');
+      return;
+    }
+    busy = label;
+    toast = null;
+    try {
+      const result = await request<string>({ command: 'mutate', action }, repo.root);
+      if (action.kind === 'commit') commitMessage = '';
+      notify(result);
+      modal = null;
+    } catch (e) {
+      notify(String(e), true);
+    } finally {
+      busy = '';
+      await refresh();
+    }
+  }
+
+  function stageFile(file: FileChange, wasStaged: boolean) {
+    void mutate(
+      { kind: wasStaged ? 'unstage' : 'stage', paths: [file.path] },
+      wasStaged ? '正在取消暂存' : '正在暂存更改',
+    );
+  }
+
+  function stageHunk(hunk: number) {
+    if (selected && diff)
+      void mutate({ kind: 'stageHunk', path: selected.path, expected: diff.patch, hunk }, '正在暂存代码块');
+  }
+
+  async function commit() {
+    if (!commitMessage.trim() || !staged.length || conflicts) return;
+    await mutate({ kind: 'commit', message: commitMessage }, '正在提交');
+  }
+
+  async function changeView(next: typeof view) {
+    if (view === next) return;
+    diffSequence++;
+    diffLoading = false;
+    diff = null;
+    selected = null;
+    currentCommit = null;
+    view = next;
+    filter = '';
+    if (next === 'history') await loadHistory();
+    else chooseNextFile();
+  }
+
+  async function loadHistory(more = false) {
+    if (!repo) return;
+    const sequence = ++historySequence;
+    historyLoading = true;
+    try {
+      const result = demo
+        ? (await import('./lib/demo')).demoHistory
+        : await request<Commit[]>({ command: 'history', offset: more ? history.length : 0 }, repo.root);
+      if (sequence !== historySequence || view !== 'history') return;
+      history = more ? [...history, ...result] : result;
+      hasMore = !demo && result.length === 60;
+      if (!currentCommit && history.length) void selectCommit(history[0]);
+    } catch (e) {
+      notify(String(e), true);
+    } finally {
+      if (sequence === historySequence) historyLoading = false;
+    }
+  }
+
+  async function selectCommit(item: Commit) {
+    if (!repo) return;
+    currentCommit = item;
+    diff = null;
+    diffLoading = true;
+    const sequence = ++diffSequence;
+    try {
+      const result = demo
+        ? (await import('./lib/demo')).demoDiff('src/lib/repository.ts')
+        : await request<Diff>({ command: 'commitPatch', oid: item.oid }, repo.root);
+      if (sequence === diffSequence) diff = result;
+    } catch (e) {
+      if (sequence === diffSequence) notify(String(e), true);
+    } finally {
+      if (sequence === diffSequence) diffLoading = false;
+    }
+  }
+
+  async function closeRepository() {
+    if (busy) return;
+    if (native && !demo && repo) {
+      try {
+        await request({ command: 'close' }, repo.root);
+      } catch (e) {
+        notify(String(e), true);
+        return;
+      }
+    }
+    repo = null;
+    demo = false;
+    diff = null;
+    selected = null;
+    currentCommit = null;
+    diffSequence++;
+    historySequence++;
+    modal = null;
+    saveSetting('last-repository', null);
+  }
+
+  const actions = [
+    { label: '打开仓库', key: `${mod} O`, run: browse },
+    { label: '刷新仓库状态', key: `${mod} R`, run: refresh },
+    { label: '查看变更', key: `${mod} ⇧ G`, run: () => changeView('changes') },
+    { label: '查看提交历史', key: '', run: () => changeView('history') },
+    { label: '切换分支', key: '', run: () => showModal('branches') },
+    { label: '切换明暗主题', key: '', run: () => (theme = theme === 'dark' ? 'light' : 'dark') },
+  ];
+
+  function keydown(event: KeyboardEvent) {
+    if (modal && event.key === 'Escape') {
+      modal = null;
+      return;
+    }
+    if (modal && event.key === 'Tab') {
+      const focusable = dialogElement?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input, [tabindex="0"]',
+      );
+      if (focusable?.length) {
+        const first = focusable[0],
+          last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    if (!(event.metaKey || event.ctrlKey)) return;
+    if (event.key.toLowerCase() === 'o') {
+      event.preventDefault();
+      void browse();
+    }
+    if (event.key.toLowerCase() === 'p') {
+      event.preventDefault();
+      void showModal('commands');
+    }
+    if (event.key.toLowerCase() === 'r') {
+      event.preventDefault();
+      void refresh();
+    }
+    if (event.key.toLowerCase() === 'g' && event.shiftKey) {
+      event.preventDefault();
+      void changeView('changes');
+    }
+    if (event.key === 'Enter' && !modal && view === 'changes') {
+      event.preventDefault();
+      void commit();
+    }
+  }
+
+  onMount(() => {
+    let disposed = false;
+    const cleanups: (() => void)[] = [];
+    const focus = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void refresh(), 200);
+    };
+    window.addEventListener('focus', focus);
+    if (native) {
+      void (async () => {
+        const stop = await listen<string>('repository-changed', (event) => {
+          if (event.payload === repo?.root && !document.hidden) focus();
+        });
+        if (disposed) stop();
+        else cleanups.push(stop);
+        const unlisten = await getCurrentWebviewWindow().onDragDropEvent((event) => {
+          if (event.payload.type === 'drop' && event.payload.paths[0])
+            void openRepository(event.payload.paths[0]);
+        });
+        if (disposed) unlisten();
+        else cleanups.push(unlisten);
+        const path =
+          (await invoke<string | null>('launch_path')) ?? readSetting<string | null>('last-repository', null);
+        if (path && !disposed) await openRepository(path);
+      })().catch((e) => notify(String(e), true));
+    }
+    return () => {
+      disposed = true;
+      cleanups.forEach((fn) => fn());
+      window.removeEventListener('focus', focus);
+      clearTimeout(refreshTimer);
+      clearTimeout(toastTimer);
+    };
+  });
+</script>
+
+<svelte:window onkeydown={keydown} />
+
+{#snippet fileRow(file: FileChange, inIndex: boolean)}
+  <div class="file-row" class:selected={selected?.path === file.path && selected.staged === inIndex}>
+    <button
+      class="file-select"
+      onclick={() => selectFile(file, inIndex)}
+      title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}
+    >
+      <span
+        class="file-type"
+        class:typescript={/\.(ts|tsx)$/.test(file.path)}
+        class:svelte={file.path.endsWith('.svelte')}
+        >{file.path.endsWith('.svelte')
+          ? 'S'
+          : /\.(ts|tsx)$/.test(file.path)
+            ? 'TS'
+            : file.path.endsWith('.json')
+              ? '{}'
+              : file.path.endsWith('.css')
+                ? '#'
+                : '≡'}</span
+      >
+      <span class="file-name"
+        >{basename(file.path)}<small
+          >{file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''}</small
+        ></span
+      >
+      <span
+        class="file-status"
+        class:added={file.index === '?' || file.index === 'A'}
+        class:conflicted={file.conflict}
+        >{file.conflict ? '!' : inIndex ? file.index : file.worktree === '?' ? 'U' : file.worktree}</span
+      >
+    </button>
+    <button
+      class="file-action icon-button"
+      disabled={!!busy || refreshing || demo}
+      onclick={() => stageFile(file, inIndex)}
+      title={inIndex ? `取消暂存 ${file.path}` : `暂存 ${file.path}`}
+      aria-label={inIndex ? `取消暂存 ${file.path}` : `暂存 ${file.path}`}
+      >{#if inIndex}<Minus size={15} />{:else}<Plus size={15} />{/if}</button
+    >
+  </div>
+{/snippet}
+
+<div class="app-shell">
+  <aside class="activity-bar" aria-label="主导航">
+    <button
+      class="brand-mark"
+      title="GitPane 首页"
+      onclick={() => {
+        if (!busy) void showModal('repository');
+      }}><img src="/favicon.svg" alt="GitPane" /></button
+    >
+    <div class="activity-main">
+      <button
+        class:active={view === 'changes'}
+        onclick={() => changeView('changes')}
+        title="变更"
+        aria-label="变更"
+        ><GitBranch size={23} weight="light" />{#if repo?.files.length}<span class="activity-dot"
+          ></span>{/if}</button
+      >
+      <button
+        class:active={view === 'history'}
+        disabled={!repo}
+        onclick={() => changeView('history')}
+        title="提交历史"
+        aria-label="提交历史"><ClockCounterClockwise size={23} weight="light" /></button
+      >
+      <button onclick={() => showModal('repository')} title="仓库" aria-label="仓库"
+        ><FolderOpen size={23} weight="light" /></button
+      >
+    </div>
+    <div class="activity-bottom">
+      <button onclick={() => showModal('commands')} title="命令面板" aria-label="命令面板"
+        ><Command size={21} /></button
+      >
+      <button
+        onclick={() => (theme = theme === 'dark' ? 'light' : 'dark')}
+        title="切换明暗主题"
+        aria-label="切换明暗主题"
+        >{#if theme === 'dark'}<Sun size={21} weight="light" />{:else}<Moon
+            size={21}
+            weight="light"
+          />{/if}</button
+      >
+      <button onclick={() => showModal('help')} title="快捷键与关于" aria-label="快捷键与关于"
+        ><Keyboard size={21} weight="light" /></button
+      >
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <header class="topbar">
+      <button class="repo-switcher" onclick={() => showModal('repository')} disabled={!!busy}>
+        <span class="repo-avatar">{repo ? repo.name.slice(0, 1).toUpperCase() : 'G'}</span>
+        <span>{repo?.name ?? 'GitPane'}<small>{repo ? '本地仓库' : '你的轻量 Git 工作空间'}</small></span>
+        <CaretDown size={13} />
+      </button>
+      <div class="topbar-center">
+        <span class="local-dot"></span>{demo ? '演示模式 · 只读' : 'LOCAL WORKSPACE'}
+      </div>
+      <div class="remote-actions">
+        <button
+          disabled={!repo || !!busy || refreshing || demo}
+          onclick={() => mutate({ kind: 'remote', operation: 'fetch' }, '正在 Fetch')}
+          title="获取远程更新"><ArrowsClockwise size={15} />Fetch</button
+        >
+        <button
+          disabled={!repo || !!busy || refreshing || demo}
+          onclick={() => mutate({ kind: 'remote', operation: 'pull' }, '正在 Pull')}
+          title="仅快进拉取，不自动合并"
+          ><ArrowDown size={15} />Pull{#if repo?.behind}<span>{repo.behind}</span>{/if}</button
+        >
+        <button
+          disabled={!repo || !!busy || refreshing || demo}
+          onclick={() => mutate({ kind: 'remote', operation: 'push' }, '正在 Push')}
+          title="推送当前分支"
+          ><ArrowUp size={15} />Push{#if repo?.ahead}<span>{repo.ahead}</span>{/if}</button
+        >
+      </div>
+    </header>
+
+    {#if repo}
+      <div class="workspace-content">
+        <aside class="source-panel">
+          <div class="source-heading">
+            <h1>{view === 'changes' ? '源代码管理' : '提交历史'}</h1>
+            <div>
+              <span class="subtle-label">{view === 'changes' ? repo.files.length : history.length}</span
+              ><button
+                class="icon-button"
+                onclick={refresh}
+                disabled={!!busy || refreshing || demo}
+                title="刷新仓库"
+                aria-label="刷新仓库"
+                ><ArrowsClockwise size={16} class={refreshing ? 'spinning' : ''} /></button
+              >
+            </div>
+          </div>
+          <div class="source-tabs">
+            <button class:active={view === 'changes'} onclick={() => changeView('changes')}>变更</button
+            ><button class:active={view === 'history'} onclick={() => changeView('history')}>历史</button>
+          </div>
+          {#if view === 'changes'}
+            <div class="commit-box">
+              <label for="commit-message">提交说明</label>
+              <textarea
+                id="commit-message"
+                bind:value={commitMessage}
+                placeholder="这次做了什么改动？"
+                rows="3"
+                disabled={!!busy || demo}></textarea>
+              <div class="commit-hint"><span>{staged.length} 个文件已暂存</span><kbd>{mod} ↵</kbd></div>
+              <button
+                class="primary commit-button"
+                onclick={commit}
+                disabled={!commitMessage.trim() ||
+                  !staged.length ||
+                  !!busy ||
+                  refreshing ||
+                  !!conflicts ||
+                  demo}><Check size={16} weight="bold" />提交暂存更改</button
+              >
+            </div>
+            <div class="file-filter">
+              <MagnifyingGlass size={14} /><input
+                aria-label="筛选更改文件"
+                bind:value={filter}
+                placeholder="筛选文件…"
+              />{#if filter}<button class="icon-button" onclick={() => (filter = '')} aria-label="清除筛选"
+                  ><X size={12} /></button
+                >{/if}
+            </div>
+            <div class="file-groups">
+              <div class="group-heading">
+                <button onclick={() => (stagedExpanded = !stagedExpanded)} aria-expanded={stagedExpanded}
+                  >{#if stagedExpanded}<CaretDown size={12} />{:else}<CaretRight size={12} />{/if}暂存的更改
+                  <span>{staged.length}</span></button
+                ><button
+                  class="icon-button"
+                  disabled={!staged.length || !!busy || refreshing || demo}
+                  onclick={() =>
+                    mutate({ kind: 'unstage', paths: staged.map((f) => f.path) }, '正在取消全部暂存')}
+                  title="取消全部暂存"
+                  aria-label="取消全部暂存"><Minus size={14} /></button
+                >
+              </div>
+              {#if stagedExpanded}{#each filteredStaged as file (file.path)}{@render fileRow(
+                    file,
+                    true,
+                  )}{/each}{#if !staged.length}<p class="group-empty">
+                    暂存后，这些更改将包含在提交中
+                  </p>{/if}{/if}
+              <div class="group-heading unstaged-heading">
+                <button
+                  onclick={() => (unstagedExpanded = !unstagedExpanded)}
+                  aria-expanded={unstagedExpanded}
+                  >{#if unstagedExpanded}<CaretDown size={12} />{:else}<CaretRight size={12} />{/if}更改
+                  <span>{unstaged.length}</span></button
+                ><button
+                  class="icon-button"
+                  disabled={!unstaged.length || !!busy || refreshing || demo || !!conflicts}
+                  onclick={() =>
+                    mutate({ kind: 'stage', paths: unstaged.map((f) => f.path) }, '正在暂存全部更改')}
+                  title="暂存全部更改"
+                  aria-label="暂存全部更改"><Plus size={14} /></button
+                >
+              </div>
+              {#if unstagedExpanded}{#each filteredUnstaged as file (file.path)}{@render fileRow(
+                    file,
+                    false,
+                  )}{/each}{#if !unstaged.length}<p class="group-empty">工作区没有未暂存的更改</p>{/if}{/if}
+              {#if filter && !filteredStaged.length && !filteredUnstaged.length}<p class="group-empty">
+                  没有匹配的文件
+                </p>{/if}
+            </div>
+            <div class="source-tip"><Keyboard size={15} /><span>小步提交，让每次改动更清晰。</span></div>
+          {:else}
+            <div class="history-context">
+              <GitBranch size={14} /><span>{repo.branch}</span><small>当前分支</small>
+            </div>
+            <div class="history-list">
+              {#each history as item (item.oid)}
+                <button
+                  class="history-item"
+                  class:selected={currentCommit?.oid === item.oid}
+                  onclick={() => selectCommit(item)}
+                  ><span class="history-node"><GitCommit size={18} /></span><span class="history-body"
+                    ><strong>{item.subject}</strong>{#if item.refs}<span class="ref-badge">{item.refs}</span
+                      >{/if}<small>{item.author}<code>{item.short}</code></small><time
+                      >{new Date(item.date).toLocaleDateString('zh-CN')}</time
+                    ></span
+                  ></button
+                >
+              {/each}
+              {#if historyLoading}<div class="group-empty">
+                  正在读取提交历史…
+                </div>{:else if !history.length}<div class="pane-empty compact">
+                  <GitCommit size={30} />
+                  <h3>还没有提交</h3>
+                  <p>完成第一次提交后，在这里回顾改动。</p>
+                </div>{/if}
+              {#if hasMore}<button
+                  class="load-more"
+                  disabled={historyLoading}
+                  onclick={() => loadHistory(true)}>加载更多提交</button
+                >{/if}
+            </div>
+          {/if}
+          <button class="branch-switcher" onclick={() => showModal('branches')} disabled={!!busy}
+            ><GitBranch size={16} /><span>{repo.branch}</span><CaretDown size={13} /></button
+          >
+        </aside>
+
+        <main class="main-panel">
+          {#if repo.merging || conflicts}<div class="conflict-notice">
+              <WarningCircle size={16} /><span
+                >{conflicts
+                  ? `${conflicts} 个文件存在冲突。请在编辑器中解决，确认后逐个暂存。`
+                  : '仓库正在合并或变基，请确认操作状态后继续。'}</span
+              >
+            </div>{/if}
+          {#if view === 'changes' && selected}
+            <div class="editor-tabbar">
+              <div class="editor-tab">
+                <FileCode size={15} /><span>{basename(selected.path)}</span><span class="tab-status"
+                  >{selected.staged ? '暂存' : '工作区'}</span
+                >
+              </div>
+              <span class="editor-tab-trail">差异审查</span>
+            </div>
+            <div class="review-heading">
+              <div>
+                <span class="eyebrow">REVIEW YOUR CHANGES</span>
+                <h2>{selected.staged ? '准备好提交的改动' : '每一处改动，清晰可见。'}</h2>
+              </div>
+              <button
+                class="secondary"
+                disabled={!!busy || refreshing || demo}
+                onclick={() => activeFile && stageFile(activeFile, selected!.staged)}
+                >{#if selected.staged}<Minus size={14} />取消暂存{:else}<Plus
+                    size={14}
+                  />{activeFile?.conflict ? '标记已解决并暂存' : '暂存文件'}{/if}</button
+              >
+            </div>
+            <DiffView
+              {diff}
+              path={selected.path}
+              staged={selected.staged}
+              loading={diffLoading}
+              busy={!!busy || refreshing}
+              onhunk={stageHunk}
+              bind:mode
+            />
+          {:else if view === 'history' && currentCommit}
+            <div class="editor-tabbar">
+              <div class="editor-tab"><GitCommit size={15} /><span>{currentCommit.short}</span></div>
+              <span class="editor-tab-trail">提交详情</span>
+            </div>
+            <div class="review-heading commit-detail">
+              <div>
+                <span class="eyebrow"
+                  >{currentCommit.author} · {new Date(currentCommit.date).toLocaleString('zh-CN')}</span
+                >
+                <h2>{currentCommit.subject}</h2>
+              </div>
+            </div>
+            <DiffView {diff} path={`commit ${currentCommit.short}`} staged loading={diffLoading} bind:mode />
+          {:else}
+            <div class="clean-workspace">
+              <div class="clean-icon"><CheckCircle size={46} weight="light" /></div>
+              <span class="eyebrow">ALL CLEAR</span>
+              <h2>{view === 'history' ? '从第一次提交开始' : '工作区，一切就绪。'}</h2>
+              <p>
+                {view === 'history'
+                  ? '你的项目历史将在这里展开。'
+                  : '在你喜欢的编辑器中继续创作。保存文件后，改动会自动出现在这里。'}
+              </p>
+              <div class="clean-repo"><GitBranch size={15} />{repo.branch}<span>·</span>{repo.name}</div>
+              <button class="secondary" onclick={refresh} disabled={refreshing || !!busy || demo}
+                ><ArrowsClockwise size={14} />刷新仓库</button
+              >
+            </div>
+          {/if}
+        </main>
+      </div>
+    {:else}
+      <main class="welcome">
+        <div class="welcome-copy">
+          <div class="welcome-kicker"><span class="local-dot"></span>更专注的本地工作空间</div>
+          <h1>熟悉的 Git。<br /><span>轻一点，快一点。</span></h1>
+          <p>从查看第一处差异，到提交最后一行改动。<br />把你熟悉的操作，放进一个刚刚好的窗口。</p>
+          <div class="welcome-actions">
+            <button class="primary" onclick={browse} disabled={!!busy}
+              ><FolderOpen size={18} />打开本地仓库<span>{mod} O</span></button
+            ><button class="text-button" onclick={loadDemo}>先看看界面<ArrowRight size={16} /></button>
+          </div>
+          <div class="welcome-principles">
+            <span><Check size={14} />无需登录</span><span><Check size={14} />代码留在本地</span><span
+              ><Check size={14} />沿用 Git 配置</span
+            >
+          </div>
+          {#if recents.length}<div class="recent-welcome">
+              <span class="eyebrow">最近打开</span>{#each recents.slice(0, 3) as path}<button
+                  onclick={() => openRepository(path)}
+                  disabled={!!busy}
+                  ><FolderOpen size={15} /><span>{basename(path)}<small>{path}</small></span><ArrowRight
+                    size={14}
+                  /></button
+                >{/each}
+            </div>{/if}
+        </div>
+        <div class="welcome-art" aria-hidden="true">
+          <div class="art-caption">
+            <img src="/favicon.svg" alt="" />gitpane<span>一个窗口，专注改动。</span>
+          </div>
+          <div class="art-branch">
+            <GitBranch size={16} />feat / something-great<Circle size={9} weight="fill" />
+          </div>
+          <div class="art-diff">
+            <span class="art-context"> import &#123; idea &#125; from './you';</span><span
+              class="art-context"
+            >
+            </span><span class="art-removed">− const workspace = everything;</span><span class="art-added"
+              >+ const workspace = whatMatters;</span
+            ><span class="art-context"> </span><span class="art-context">
+              export default yourNextCommit;</span
+            >
+          </div>
+          <div class="art-commit">
+            <span><CheckCircle size={18} />Ready for your next commit</span><kbd>⌘ ↵</kbd>
+          </div>
+          <div class="art-bottom">
+            <span><GitBranch size={13} />main</span><span>LESS FRICTION. MORE FLOW.</span>
+          </div>
+        </div>
+        <div class="welcome-bottom">
+          <span>GitPane <b>0.1</b></span><span>Windows & macOS · 为日常开发而造</span><button
+            onclick={() => showModal('help')}>键盘快捷键<Keyboard size={15} /></button
+          >
+        </div>
+      </main>
+    {/if}
+
+    <footer class="statusbar">
+      <div>
+        {#if repo}<button onclick={() => showModal('branches')} disabled={!!busy}
+            ><GitBranch size={13} />{repo.branch}</button
+          ><span class="sync-count"
+            ><ArrowDown size={11} />{repo.behind}<ArrowUp size={11} />{repo.ahead}</span
+          >{:else}<span><GitBranch size={13} />GitPane</span>{/if}
+      </div>
+      <div class="status-message" aria-live="polite">
+        {#if busy || refreshing}<ArrowsClockwise size={12} class="spinning" />{busy || '正在刷新'}{:else}<span
+            class="local-dot"
+          ></span>{demo ? '只读演示 · 不会修改本地文件' : repo ? '工作区已同步' : '就绪'}{/if}
+      </div>
+      <div>
+        <span class="status-path" title={repo?.root}
+          >{repo ? (demo ? 'DEMO' : `更新于 ${refreshedAt}`) : 'LOCAL FIRST'}</span
+        ><button onclick={() => showModal('commands')} title="命令面板"
+          ><Command size={12} /><span>{mod} P</span></button
+        >
+      </div>
+    </footer>
+  </div>
+</div>
+
+{#if toast}
+  <div class="toast" class:error={toast.error} role={toast.error ? 'alert' : 'status'}>
+    {#if toast.error}<WarningCircle size={19} />{:else}<CheckCircle size={19} />{/if}
+    <div>
+      <strong>{toast.error ? '操作未完成' : 'GitPane'}</strong>
+      <p>{toast.text}</p>
+    </div>
+    <button class="icon-button" onclick={() => (toast = null)} aria-label="关闭提示"><X size={15} /></button>
+  </div>
+{/if}
+
+{#if modal}
+  <div
+    class="modal-backdrop"
+    role="presentation"
+    onclick={(event) => {
+      if (event.target === event.currentTarget) modal = null;
+    }}
+  >
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label={modal === 'branches'
+        ? '切换分支'
+        : modal === 'commands'
+          ? '命令面板'
+          : modal === 'help'
+            ? '快捷键与关于'
+            : '打开仓库'}
+      tabindex="-1"
+      bind:this={dialogElement}
+    >
+      <div class="modal-title">
+        <span
+          >{#if modal === 'branches'}<GitBranch size={19} />切换分支{:else if modal === 'commands'}<Command
+              size={19}
+            />命令面板{:else if modal === 'help'}<Keyboard size={19} />熟悉的操作，更顺手{:else}<FolderOpen
+              size={19}
+            />你的仓库{/if}</span
+        ><button class="icon-button" onclick={() => (modal = null)} aria-label="关闭对话框"
+          ><X size={18} /></button
+        >
+      </div>
+      {#if modal === 'repository'}
+        <div class="modal-body">
+          <label for="repo-path">本地仓库路径</label>
+          <form
+            onsubmit={(e) => {
+              e.preventDefault();
+              if (pathInput.trim()) void openRepository(pathInput.trim());
+            }}
+          >
+            <div class="path-input">
+              <input
+                id="repo-path"
+                bind:value={pathInput}
+                placeholder={mac ? '/Users/you/projects/my-app' : 'D:\Projects\my-app'}
+              /><button class="primary" type="submit" disabled={!pathInput.trim() || !!busy || !native}
+                >打开</button
+              >
+            </div>
+          </form>
+          <button class="browse-button" onclick={browse} disabled={!!busy}
+            ><FolderOpen size={16} />浏览文件夹<span>{mod} O</span></button
+          >
+          <p class="modal-note">也可以把仓库文件夹直接拖进窗口。</p>
+          {#if recents.length}<div class="modal-section-title">最近打开</div>
+            {#each recents as path}<button
+                class="recent-item"
+                onclick={() => openRepository(path)}
+                disabled={!!busy}
+                ><FolderOpen size={16} /><span>{basename(path)}<small>{path}</small></span><ArrowRight
+                  size={14}
+                /></button
+              >{/each}{/if}{#if repo}<button
+              class="text-button close-repo"
+              onclick={closeRepository}
+              disabled={!!busy}>返回欢迎页</button
+            >{/if}
+        </div>
+      {:else if modal === 'branches'}
+        <div class="modal-search">
+          <MagnifyingGlass size={17} /><input
+            aria-label="搜索分支"
+            bind:value={query}
+            placeholder="搜索本地分支…"
+          />
+        </div>
+        <div class="command-list">
+          {#each branches.filter((b) => b.name.toLowerCase().includes(query.toLowerCase())) as branch}<button
+              class="command-item"
+              disabled={branch.current || !!busy || demo}
+              onclick={() =>
+                mutate({ kind: 'switchBranch', name: branch.name, create: false }, '正在切换分支')}
+              ><GitBranch size={16} /><span>{branch.name}</span>{#if branch.current}<Check
+                  size={16}
+                />{/if}</button
+            >{/each}{#if branchesLoading}<p class="modal-note">正在读取分支…</p>{/if}
+        </div>
+        <form
+          class="create-branch"
+          onsubmit={(e) => {
+            e.preventDefault();
+            if (newBranch.trim())
+              void mutate({ kind: 'switchBranch', name: newBranch.trim(), create: true }, '正在创建分支');
+          }}
+        >
+          <label for="new-branch">从当前 HEAD 创建分支</label>
+          <div class="path-input">
+            <input id="new-branch" bind:value={newBranch} placeholder="feat/my-next-idea" /><button
+              class="primary"
+              disabled={!newBranch.trim() || !!busy || demo}><Plus size={14} />创建</button
+            >
+          </div>
+        </form>
+      {:else if modal === 'commands'}
+        <div class="modal-search">
+          <MagnifyingGlass size={17} /><input
+            aria-label="搜索命令"
+            bind:value={query}
+            placeholder="输入命令名称…"
+          />
+        </div>
+        <div class="command-list">
+          {#each actions.filter((a) => a.label.includes(query)) as action}<button
+              class="command-item"
+              disabled={!!busy}
+              onclick={() => {
+                modal = null;
+                void action.run();
+              }}><CaretRight size={14} /><span>{action.label}</span><kbd>{action.key}</kbd></button
+            >{/each}
+        </div>
+      {:else}
+        <div class="modal-body help-body">
+          <div class="about-logo">
+            <img src="/favicon.svg" alt="" /><span>GitPane<small>0.1.0 · 本地 Git 工作空间</small></span>
+          </div>
+          <p>查看差异、暂存、提交。把注意力留给代码。</p>
+          {#each [[`${mod} O`, '打开仓库'], [`${mod} P`, '命令面板'], [`${mod} R`, '刷新仓库'], [`${mod} ⇧ G`, '查看变更'], [`${mod} ↵`, '提交暂存更改'], ['Esc', '关闭对话框']] as shortcut}<div
+              class="shortcut-row"
+            >
+              <span>{shortcut[1]}</span><kbd>{shortcut[0]}</kbd>
+            </div>{/each}
+          <p class="modal-note">
+            使用系统 Git。暂存与提交在本地完成；Fetch / Pull / Push 连接仓库配置的远程。Pull 仅执行快进更新。
+          </p>
+        </div>
+      {/if}
+      <div class="modal-footer">
+        <span>{busy || 'GitPane · 保持专注'}</span><span><kbd>esc</kbd> 关闭</span>
+      </div>
+    </div>
+  </div>
+{/if}
