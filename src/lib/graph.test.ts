@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutGraph } from './graph';
+import { layoutGraph, GRAPH_ROW_HEIGHT } from './graph';
 import type { Commit } from './types';
 
 const commit = (oid: string, parents: string[] = []): Commit => ({
@@ -36,14 +36,32 @@ describe('commit graph layout', () => {
   it('starts unrelated tips without drawing a false incoming line', () => {
     const graph = layoutGraph([commit('top', ['base']), commit('independent'), commit('base')]);
     expect(graph.rows[1]).toMatchObject({ lane: 1, incoming: false, parents: [] });
-    expect(graph.rows[1].paths.every((path) => !path.d.includes('M 32 0 L 32 18'))).toBe(true);
+    expect(graph.rows[1].paths.every((path) => !path.d.includes('M 32 0 L 32 20'))).toBe(true);
   });
 
   it('does not change already loaded rows when another page arrives', () => {
     const first = [commit('merge', ['left', 'right']), commit('left', ['base'])];
     const later = [...first, commit('right', ['base']), commit('base')];
     expect(layoutGraph(first).rows.map((row) => row.paths)).toEqual(
-      layoutGraph(later).rows.slice(0, first.length).map((row) => row.paths),
+      layoutGraph(later)
+        .rows.slice(0, first.length)
+        .map((row) => row.paths),
     );
+  });
+  it('routes octopus merge parents after all lane insertions', () => {
+    const graph = layoutGraph([
+      commit('tip', ['a', 'b', 'merge']),
+      commit('merge', ['b', 'a', 'new']),
+      commit('b'),
+      commit('a'),
+      commit('new'),
+    ]);
+    expect(graph.rows[1].parents).toEqual([2, 0, 1]);
+  });
+
+  it('draws edges to the next row boundary without gaps', () => {
+    const graph = layoutGraph([commit('b', ['a']), commit('a')]);
+    expect(graph.rows[0].paths[0].d.endsWith('14 ' + GRAPH_ROW_HEIGHT)).toBe(true);
+    expect(graph.rows[1].paths[0].d).toBe('M 14 0 L 14 20');
   });
 });

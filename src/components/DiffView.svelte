@@ -7,6 +7,7 @@
     diff,
     path,
     staged = false,
+    historical = false,
     loading = false,
     busy = false,
     onhunk,
@@ -15,6 +16,7 @@
     diff: Diff | null;
     path: string;
     staged?: boolean;
+    historical?: boolean;
     loading?: boolean;
     busy?: boolean;
     onhunk?: (hunk: number) => void;
@@ -83,8 +85,16 @@
     </div>
   </div>
   <div class="diff-labels" class:split={mode === 'split'}>
-    <span>{staged ? 'HEAD · 上次提交' : 'INDEX · 暂存版本'}</span>
-    {#if mode === 'split'}<span>{staged ? 'INDEX · 暂存版本' : 'WORKING TREE · 工作区'}</span>{/if}
+    <span
+      >{historical
+        ? 'PARENT · 第一父提交（根提交为空）'
+        : staged
+          ? 'HEAD · 上次提交'
+          : 'INDEX · 暂存版本'}</span
+    >
+    {#if mode === 'split'}<span
+        >{historical ? 'COMMIT · 所选提交' : staged ? 'INDEX · 暂存版本' : 'WORKING TREE · 工作区'}</span
+      >{/if}
   </div>
   {#if loading}
     <div class="diff-skeleton" aria-label="正在加载差异">

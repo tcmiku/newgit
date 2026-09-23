@@ -94,16 +94,22 @@ pub enum Mutation {
     },
     AddRemote {
         name: String,
+        #[serde(rename = "fetchUrl")]
         fetch_url: String,
+        #[serde(rename = "pushUrl")]
         push_url: Option<String>,
     },
     SetRemote {
         name: String,
+        #[serde(rename = "fetchUrl")]
         fetch_url: String,
+        #[serde(rename = "pushUrl")]
         push_url: Option<String>,
     },
     RenameRemote {
+        #[serde(rename = "oldName")]
         old_name: String,
+        #[serde(rename = "newName")]
         new_name: String,
     },
     RemoveRemote {

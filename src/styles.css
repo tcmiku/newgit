@@ -1788,3 +1788,22 @@ kbd {
     transform: none;
   }
 }
+
+.workspace-content.history-workspace {
+  grid-template-columns: minmax(490px, 3fr) minmax(320px, 2fr);
+}
+@media (max-width: 1000px) {
+  .workspace-content.history-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 1fr) minmax(220px, 1fr);
+  }
+}
+
+.modal.remote-modal {
+  display: flex;
+  flex-direction: column;
+}
+.remote-modal > .modal-title,
+.remote-modal > .modal-footer {
+  flex-shrink: 0;
+}

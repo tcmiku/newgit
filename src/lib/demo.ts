@@ -1,4 +1,4 @@
-import type { Snapshot, Diff, Commit } from './types';
+import type { Snapshot, Diff, Commit, RemoteInfo } from './types';
 
 export const demoSnapshot: Snapshot = {
   root: 'demo://gitpane',
@@ -97,11 +97,11 @@ export const demoHistory: Commit[] = [
   {
     oid: 'f02b5810000000000000000000000000000000000',
     short: 'f02b581',
-    subject: 'perf: load file diffs on demand',
+    subject: 'merge: integrate history graph',
     author: 'Alex Chen',
     date: '2026-09-22T16:40:00+08:00',
     refs: '',
-    parents: ['8be043d0000000000000000000000000000000000'],
+    parents: ['8be043d0000000000000000000000000000000000', 'd319a440000000000000000000000000000000000'],
   },
   {
     oid: '8be043d0000000000000000000000000000000000',
@@ -113,6 +113,15 @@ export const demoHistory: Commit[] = [
     parents: ['391ad6e0000000000000000000000000000000000'],
   },
   {
+    oid: 'd319a440000000000000000000000000000000000',
+    short: 'd319a44',
+    subject: 'feat: draw branch and merge lanes',
+    author: 'Sam Lin',
+    date: '2026-09-22T08:00:00+08:00',
+    refs: 'feat/graph, origin/feat/graph, tag: v0.1.0',
+    parents: ['391ad6e0000000000000000000000000000000000'],
+  },
+  {
     oid: '391ad6e0000000000000000000000000000000000',
     short: '391ad6e',
     subject: 'chore: initialize GitPane',
@@ -121,4 +130,8 @@ export const demoHistory: Commit[] = [
     refs: 'main',
     parents: [],
   },
+];
+
+export const demoRemotes: RemoteInfo[] = [
+  { name: 'origin', fetchUrl: 'git@github.com:example/gitpane.git', pushUrl: null },
 ];

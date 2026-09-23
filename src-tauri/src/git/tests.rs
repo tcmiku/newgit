@@ -470,3 +470,28 @@ fn remote_names_urls_and_multiple_push_urls_are_guarded() {
         "https://example.com/repo"
     );
 }
+
+#[test]
+fn remote_mutations_accept_frontend_field_names() {
+    let add = serde_json::json!({
+        "kind": "addRemote", "name": "origin", "fetchUrl": "../remote.git", "pushUrl": null
+    });
+    assert!(matches!(
+        serde_json::from_value::<Mutation>(add).unwrap(),
+        Mutation::AddRemote { .. }
+    ));
+    let update = serde_json::json!({
+        "kind": "setRemote", "name": "origin", "fetchUrl": "../other.git", "pushUrl": "../push.git"
+    });
+    assert!(matches!(
+        serde_json::from_value::<Mutation>(update).unwrap(),
+        Mutation::SetRemote { .. }
+    ));
+    let rename = serde_json::json!({
+        "kind": "renameRemote", "oldName": "origin", "newName": "backup"
+    });
+    assert!(matches!(
+        serde_json::from_value::<Mutation>(rename).unwrap(),
+        Mutation::RenameRemote { .. }
+    ));
+}
