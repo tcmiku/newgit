@@ -1914,22 +1914,6 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
 }
-.remote-actions button:nth-child(1) {
-  color: #b899ff;
-  background: #b899ff19;
-}
-.remote-actions button:nth-child(2) {
-  color: var(--branch);
-  background: #59dce719;
-}
-.remote-actions button:nth-child(4) {
-  color: var(--positive);
-  background: #7de8c319;
-}
-.remote-actions button:nth-child(5) {
-  color: var(--red);
-  background: #ff77aa19;
-}
 .remote-actions button > span {
   position: absolute;
   top: -6px;
@@ -2200,17 +2184,16 @@ kbd {
   background: transparent;
   color: var(--muted);
 }
-.remote-actions button:nth-child(1),
-.remote-actions button:nth-child(2),
-.remote-actions button:nth-child(4),
-.remote-actions button:nth-child(5) {
-  background: transparent;
-  color: var(--muted);
+.remote-actions button.topbar-fetch {
+  margin-left: 8px;
 }
-.remote-actions button:nth-child(3) {
-  margin-left: 5px;
-  border-left-color: var(--border);
-  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+.remote-actions button.topbar-fetch:before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  width: 1px;
+  height: 19px;
+  background: var(--border-strong);
 }
 .remote-actions button:not(:disabled):hover {
   background: var(--hover);
@@ -2252,7 +2235,7 @@ kbd {
 .source-tabs button {
   flex: 1;
   height: 30px;
-  gap: 5px;
+  gap: 0;
   border-radius: 8px;
   color: var(--muted);
   font-size: 10px;
@@ -2318,6 +2301,12 @@ kbd {
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
+.review-stage-action {
+  width: 33px;
+  height: 31px;
+  min-height: 31px;
+  padding: 0;
+}
 .secondary {
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2365,6 +2354,16 @@ kbd {
 }
 .notice-rail {
   top: 64px;
+  width: min(264px, 100vw);
+}
+.notice-strip {
+  grid-template-columns: 27px minmax(0, 1fr) 22px;
+}
+.notice-tag {
+  min-width: 27px;
+  width: 27px;
+  height: 27px;
+  padding: 0;
 }
 @media (max-width: 1100px) {
   .workspace-content {

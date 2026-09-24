@@ -3,9 +3,10 @@ mod git;
 mod menu_bar;
 
 use notify::{RecursiveMode, Watcher};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
-    path::PathBuf,
+    collections::HashSet,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -20,6 +21,94 @@ struct Repository {
 }
 
 type Shared = Arc<Mutex<Repository>>;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepositoryChange {
+    root: String,
+    paths: Vec<String>,
+    git_state: bool,
+}
+
+fn git_relative<'a>(path: &'a Path, git_dir: Option<&Path>) -> Option<&'a Path> {
+    if let Some(relative) = git_dir.and_then(|dir| path.strip_prefix(dir).ok()) {
+        return Some(relative);
+    }
+    let mut parts = path.components();
+    while let Some(part) = parts.next() {
+        if part.as_os_str() == ".git" {
+            return Some(parts.as_path());
+        }
+    }
+    None
+}
+
+fn git_state_change(relative: &Path) -> bool {
+    matches!(
+        relative
+            .components()
+            .next()
+            .and_then(|part| part.as_os_str().to_str()),
+        Some(
+            "index"
+                | "HEAD"
+                | "config"
+                | "config.worktree"
+                | "packed-refs"
+                | "refs"
+                | "FETCH_HEAD"
+                | "MERGE_HEAD"
+                | "rebase-merge"
+                | "rebase-apply"
+                | "sequencer"
+        )
+    )
+}
+
+fn relevant_change(path: &Path, git_dir: Option<&Path>) -> bool {
+    if let Some(relative) = git_relative(path, git_dir) {
+        return git_state_change(relative);
+    }
+    for part in path.components() {
+        match part.as_os_str().to_str() {
+            Some("node_modules" | "target" | "dist" | "objects" | ".next") => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod watcher_tests {
+    use super::relevant_change;
+    use std::path::Path;
+
+    #[test]
+    fn ignores_git_noise_and_build_output_but_keeps_repository_changes() {
+        let git_dir = Path::new("repo/.git");
+        assert!(relevant_change(
+            Path::new("repo/src/main.ts"),
+            Some(git_dir)
+        ));
+        assert!(relevant_change(Path::new("repo/.git/index"), Some(git_dir)));
+        assert!(relevant_change(
+            Path::new("repo/.git/refs/heads/main"),
+            Some(git_dir)
+        ));
+        assert!(!relevant_change(
+            Path::new("repo/.git/COMMIT_EDITMSG"),
+            Some(git_dir)
+        ));
+        assert!(!relevant_change(
+            Path::new("repo/.git/objects/ab/123"),
+            Some(git_dir)
+        ));
+        assert!(!relevant_change(
+            Path::new("repo/src-tauri/target/release/app.exe"),
+            Some(git_dir)
+        ));
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "command", rename_all = "camelCase")]
@@ -36,38 +125,63 @@ enum Request {
     CommitPatch { oid: String },
 }
 
-fn watch(root: &std::path::Path, app: tauri::AppHandle) -> Option<notify::RecommendedWatcher> {
+fn watch(root: &Path, app: tauri::AppHandle) -> Option<notify::RecommendedWatcher> {
     let (tx, rx) = std::sync::mpsc::channel();
+    let git_dir = git::git_dir(root)
+        .ok()
+        .and_then(|dir| dir.canonicalize().ok());
+    let event_git_dir = git_dir.clone();
+    let thread_git_dir = git_dir.clone();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         if let Ok(event) = event {
             if matches!(event.kind, notify::EventKind::Access(_)) {
                 return;
             }
-            let relevant = event.paths.iter().any(|path| {
-                !path.components().any(|part| {
-                    matches!(
-                        part.as_os_str().to_str(),
-                        Some("node_modules" | "target" | "dist" | "objects" | ".next")
-                    )
-                })
-            });
-            if relevant {
-                let _ = tx.send(());
+            let relevant: Vec<_> = event
+                .paths
+                .into_iter()
+                .filter(|path| relevant_change(path, event_git_dir.as_deref()))
+                .collect();
+            if !relevant.is_empty() {
+                let _ = tx.send(relevant);
             }
         }
     })
     .ok()?;
     watcher.watch(root, RecursiveMode::Recursive).ok()?;
-    if let Ok(dir) = git::git_dir(root) {
+    if let Some(dir) = git_dir {
         if !dir.starts_with(root) {
             let _ = watcher.watch(&dir, RecursiveMode::Recursive);
         }
     }
     let path = git::display_path(root);
+    let root = root.to_path_buf();
     std::thread::spawn(move || {
-        while rx.recv().is_ok() {
-            while rx.recv_timeout(Duration::from_millis(250)).is_ok() {}
-            let _ = app.emit("repository-changed", &path);
+        while let Ok(mut changed) = rx.recv() {
+            while let Ok(next) = rx.recv_timeout(Duration::from_millis(250)) {
+                changed.extend(next);
+            }
+            let mut paths = HashSet::new();
+            let mut git_state = false;
+            for entry in changed {
+                if git_relative(&entry, thread_git_dir.as_deref()).is_some() {
+                    git_state = true;
+                } else if let Ok(relative) = entry.strip_prefix(&root) {
+                    paths.insert(relative.to_string_lossy().replace('\\', "/"));
+                } else {
+                    git_state = true;
+                }
+            }
+            let mut paths: Vec<_> = paths.into_iter().collect();
+            paths.sort();
+            let _ = app.emit(
+                "repository-changed",
+                RepositoryChange {
+                    root: path.clone(),
+                    paths,
+                    git_state,
+                },
+            );
         }
     });
     Some(watcher)

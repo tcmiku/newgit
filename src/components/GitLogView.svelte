@@ -33,9 +33,9 @@
       <button class="secondary" onclick={ongraph} title="提交图" aria-label="提交图"
         ><GitCommit size={18} /></button
       >
-      <select id="git-log-scope" aria-label="分支范围" bind:value={all} onchange={onscope}>
-        <option value={true}>所有分支</option>
-        <option value={false}>当前分支</option>
+      <select id="git-log-scope" aria-label="分支范围" title="分支范围" bind:value={all} onchange={onscope}>
+        <option value={true}>全部</option>
+        <option value={false}>当前</option>
       </select>
       <button onclick={onrefresh} disabled={loading} aria-label="刷新 Git 日志" title="刷新 Git 日志"
         ><ArrowsClockwise size={16} class={loading ? 'spinning' : ''} /></button
@@ -50,7 +50,7 @@
         >{loading ? '正在加载…' : '加载更早的提交'}</button
       >{/if}
   </div>
-  <div class="status"><span>最多 {limit} 条</span></div>
+  <div class="status"><span>{limit} 条</span></div>
 </section>
 
 <style>
@@ -94,7 +94,7 @@
     color: var(--text);
   }
   .toolbar select {
-    width: 105px;
+    width: 72px;
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     color: var(--text);

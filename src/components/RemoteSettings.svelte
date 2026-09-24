@@ -1,5 +1,16 @@
 <script lang="ts">
-  import { GitBranch, GearSix, ArrowsClockwise, Plus, ArrowUp, X, Check } from 'phosphor-svelte';
+  import {
+    GitBranch,
+    GearSix,
+    ArrowsClockwise,
+    Plus,
+    ArrowUp,
+    X,
+    Check,
+    PencilSimple,
+    TextT,
+    Trash,
+  } from 'phosphor-svelte';
   import type { Mutation, RemoteInfo } from '../lib/types';
   let {
     remotes,
@@ -68,7 +79,7 @@
   {#if loading}<p class="modal-note">正在读取远程仓库…</p>{/if}
   {#if error}<p role="alert">{error}</p>
     <button class="secondary" onclick={onrefresh}>重新读取</button>{/if}
-  <div class="remote-section-title"><span>远程仓库</span><span>{remotes.length}</span></div>
+  <div class="remote-section-title"><span>远程</span><span>{remotes.length}</span></div>
   <div class="remote-list">
     {#each remotes as remote (remote.name)}
       <article>
@@ -82,38 +93,50 @@
           <dd>{remote.pushUrl || remote.fetchUrl}</dd>
         </dl>
         <div class="remote-buttons">
-          <button class="secondary" disabled={disabled || loading} onclick={() => edit(remote)}
-            ><GearSix size={13} />编辑</button
+          <button
+            class="secondary remote-icon-action"
+            disabled={disabled || loading}
+            onclick={() => edit(remote)}
+            title={`编辑 ${remote.name} 地址`}
+            aria-label={`编辑 ${remote.name} 地址`}><PencilSimple size={16} /></button
           >
           <button
-            class="secondary"
+            class="secondary remote-icon-action"
             disabled={disabled || loading}
+            title={`重命名 ${remote.name}`}
+            aria-label={`重命名 ${remote.name}`}
             onclick={() => {
               renaming = remote.name;
               newName = remote.name;
               removing = null;
-            }}>重命名</button
+            }}><TextT size={16} /></button
           >
           {#if !compact}<button
-              class="secondary"
+              class="secondary remote-icon-action"
               disabled={disabled || loading}
+              title={`获取 ${remote.name} 的更新`}
+              aria-label={`获取 ${remote.name} 的更新`}
               onclick={() =>
                 onaction({ kind: 'remote', operation: 'fetch', remote: remote.name }, '正在获取远程更新')}
-              ><ArrowsClockwise size={13} />Fetch</button
+              ><ArrowsClockwise size={16} /></button
             >{/if}
           {#if !upstream}<button
-              class="secondary"
+              class="secondary remote-icon-action"
               disabled={disabled || loading}
+              title={`发布当前分支到 ${remote.name}`}
+              aria-label={`发布当前分支到 ${remote.name}`}
               onclick={() => onaction({ kind: 'publishBranch', remote: remote.name }, '正在发布分支')}
-              ><ArrowUp size={13} />发布分支</button
+              ><ArrowUp size={16} /></button
             >{/if}
           <button
-            class="text-button"
+            class="text-button remote-icon-action danger"
             disabled={disabled || loading}
+            title={`移除 ${remote.name}`}
+            aria-label={`移除 ${remote.name}`}
             onclick={() => {
               removing = remote.name;
               renaming = null;
-            }}><X size={13} />移除</button
+            }}><Trash size={16} /></button
           >
         </div>
         {#if renaming === remote.name}
@@ -168,7 +191,7 @@
     }}
   >
     <strong class="form-heading"
-      ><span><Plus size={15} /></span>{editing ? `编辑 ${editing}` : '添加远程仓库'}</strong
+      ><span><Plus size={15} /></span>{editing ? `编辑 ${editing}` : '添加远程'}</strong
     >
     <label for="remote-name">名称</label>
     <input
@@ -178,7 +201,7 @@
       required
       disabled={disabled || !!editing}
     />
-    <label for="remote-fetch">Fetch 地址</label>
+    <label for="remote-fetch">Fetch URL</label>
     <input
       id="remote-fetch"
       bind:value={fetchUrl}
@@ -186,7 +209,7 @@
       required
       {disabled}
     />
-    <label for="remote-push">Push 地址（选填）</label>
+    <label for="remote-push">Push URL · 选填</label>
     <input id="remote-push" bind:value={pushUrl} placeholder="留空使用 Fetch 地址" {disabled} />
     <div class="remote-buttons">
       <button class="primary" disabled={disabled || loading || !!error || !name.trim() || !fetchUrl.trim()}
@@ -303,6 +326,16 @@
   .remote-buttons .text-button {
     margin-left: auto;
     color: var(--red);
+  }
+  .remote-buttons .remote-icon-action {
+    width: 32px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0;
+    border-radius: 9px;
+  }
+  .remote-buttons .remote-icon-action.danger:hover {
+    background: var(--removed);
   }
   .remote-form {
     display: grid;

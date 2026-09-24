@@ -348,6 +348,7 @@ fn validate_path(path: &str) -> GitResult<()> {
 
 fn patch_for(root: &Path, path: &str, staged: bool) -> GitResult<String> {
     let mut args = vec![
+        "--no-optional-locks",
         "diff",
         "--no-ext-diff",
         "--no-textconv",

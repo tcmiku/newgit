@@ -79,9 +79,9 @@
       <button class="graph-log-link" onclick={onlog} title="Git 日志" aria-label="Git 日志"
         ><Command size={18} /></button
       >
-      <select id="graph-scope" aria-label="分支范围" bind:value={all} onchange={onscope}>
-        <option value={true}>所有分支</option>
-        <option value={false}>当前分支</option>
+      <select id="graph-scope" aria-label="分支范围" title="分支范围" bind:value={all} onchange={onscope}>
+        <option value={true}>全部</option>
+        <option value={false}>当前</option>
       </select>
       <button
         class="graph-refresh"
@@ -98,18 +98,19 @@
       id="graph-search"
       aria-label="查找已加载提交"
       bind:value={search}
-      placeholder="查找提交、作者、分支或哈希…"
+      placeholder="搜索提交…"
       onkeydown={(event) => {
         if (event.key === 'Enter') findNext();
       }}
     />
-    {#if search}<span class="graph-match-count">{matchCount} 个匹配</span><button
+    {#if search}<span class="graph-match-count" title="匹配的提交数">{matchCount}</span><button
         onclick={() => (search = '')}
         aria-label="清除查找"><X size={13} /></button
       >{/if}
   </div>
   <div class="graph-head">
-    <span>GRAPH</span><span>提交说明</span><span>作者</span><span>日期</span><span>哈希</span>
+    <span title="提交轨迹"><GitBranch size={14} /></span><span>提交</span><span>作者</span><span>日期</span
+    ><span>ID</span>
   </div>
   <div
     class="graph-viewport"
@@ -178,7 +179,7 @@
       </div>
     {/if}
   </div>
-  <div class="graph-status"><span>{commits.length} 条提交</span></div>
+  <div class="graph-status"><span>{commits.length} 条</span></div>
 </section>
 
 <style>
@@ -230,7 +231,7 @@
     background: var(--hover);
   }
   .graph-options select {
-    width: 105px;
+    width: 72px;
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     color: var(--text);

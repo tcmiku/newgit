@@ -10,6 +10,9 @@
     Minus,
     Check,
     X,
+    ArrowSquareOut,
+    CheckCircle,
+    FileCode,
   } from 'phosphor-svelte';
   import { basename, isStaged, isUnstaged } from '../lib/types';
   import type { Snapshot, FileChange } from '../lib/types';
@@ -64,7 +67,7 @@
   <header>
     <button class="repository" onclick={onopen} disabled={!!busy} title={repo?.root ?? '打开仓库'}>
       <img class="mini-brand" src="/app-icon.png" alt="" /><strong>{repo?.name ?? 'gitpane'}</strong><span
-      >{menuBar ? '菜单栏' : 'MINI'}</span
+        >{menuBar ? 'BAR' : 'MINI'}</span
       >
     </button>
     {#if onmenubar && !menuBar}<button
@@ -72,7 +75,7 @@
         onclick={onmenubar}
         disabled={switching || !!busy || refreshing}
         title="只在 macOS 菜单栏显示"
-        >移至菜单栏</button
+        aria-label="移至菜单栏"><ArrowSquareOut size={17} /></button
       >{/if}
     <button
       class="icon-button"
@@ -83,8 +86,8 @@
     >
   </header>
   {#if menuBar}<div class="panel-hint">
-      <span>点击外部或按 Esc 收起。</span>
-      <button onclick={onhide} aria-label="收起到菜单栏" title="收起到菜单栏"><X size={16} />收起</button>
+      <span>Esc 收起</span>
+      <button onclick={onhide} aria-label="收起到菜单栏" title="收起到菜单栏"><X size={16} /></button>
     </div>{/if}
   {#if repo}
     <section class="tools" aria-label="仓库操作">
@@ -110,19 +113,21 @@
         ><ArrowUp size={18} />{#if repo.ahead}<b>{repo.ahead}</b>{/if}</button
       >
     </section>
-    {#if !repo.upstream}<p class="notice">当前分支未设置上游。点击推送选择远程并发布分支。</p>{/if}
+    {#if !repo.upstream}<p class="notice">未设置上游。点击 ↑ 发布分支。</p>{/if}
     {#if conflicts || repo.merging}<p class="notice warning">
         {conflicts
           ? '请在编辑器解决冲突，再逐个标记已解决并暂存。'
           : '仓库处于合并或变基中，请确认状态后继续。'}
       </p>{/if}
     <section class="changes" aria-label="提交文件">
-      <div class="list-heading"><span>已暂存 <b>{staged.length}</b></span></div>
+      <div class="list-heading"><span><CheckCircle size={14} />暂存 <b>{staged.length}</b></span></div>
       {#each staged as file (file.path)}{@render row(file, true)}{/each}
       <div class="list-heading">
-        <span>未暂存 <b>{unstaged.length}</b></span><button
+        <span><FileCode size={14} />工作区 <b>{unstaged.length}</b></span><button
           onclick={onstageall}
-          disabled={disabled || !unstaged.length || conflicts}>全部暂存 <Plus size={13} /></button
+          disabled={disabled || !unstaged.length || conflicts}
+          title="暂存全部更改"
+          aria-label="暂存全部更改"><Plus size={16} /></button
         >
       </div>
       {#each unstaged as file (file.path)}{@render row(file, false)}{/each}
@@ -137,7 +142,7 @@
         id="mini-message"
         aria-label="提交说明"
         bind:value={commitMessage}
-        placeholder="这次做了什么改动？"
+        placeholder="提交说明…"
         rows="3"
         disabled={!!busy || demo}></textarea>
       <button class="primary" disabled={disabled || conflicts || !staged.length || !commitMessage.trim()}
@@ -153,7 +158,7 @@
   {/if}
   <footer aria-live="polite">
     <span class="local-dot"></span>{busy || (refreshing ? '正在刷新…' : demo ? '只读演示' : '就绪')}
-    {#if menuBar}<button class="quit-button" onclick={onquit}>退出 GitPane</button>{/if}
+    {#if menuBar}<button class="quit-button" onclick={onquit}>退出</button>{/if}
   </footer>
 </main>
 
@@ -226,6 +231,12 @@
     font-size: 11px;
     color: var(--muted);
   }
+  .menu-bar-button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 8px;
+  }
   .panel-hint {
     display: flex;
     align-items: center;
@@ -235,7 +246,15 @@
     color: var(--muted);
     border-bottom: 1px solid var(--border);
   }
-  .panel-hint span { flex: 1; }
+  .panel-hint span {
+    flex: 1;
+  }
+  .panel-hint button {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 8px;
+  }
   .menu-bar-button:hover,
   .quit-button:hover {
     color: var(--text);
@@ -322,9 +341,20 @@
     margin-left: 5px;
     color: var(--accent);
   }
+  .list-heading span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
   .list-heading button {
-    font-size: 11px;
-    padding: 3px 0;
+    width: 27px;
+    height: 25px;
+    padding: 0;
+    border-radius: 7px;
+    color: var(--branch);
+  }
+  .list-heading button:not(:disabled):hover {
+    background: var(--hover);
   }
   .mini-file {
     display: flex;
