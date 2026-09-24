@@ -75,6 +75,7 @@
       saveSetting('mini-mode', mini);
       modal = null;
       view = 'changes';
+      autoHistory = false;
       diffSequence++;
       historySequence++;
       gitLogSequence++;
@@ -82,7 +83,10 @@
       selected = null;
       currentCommit = null;
       diffLoading = historyLoading = gitLogLoading = false;
-      if (!mini) chooseNextFile();
+      if (!mini && repo && !repo.files.length) {
+        historyMode = 'graph';
+        await changeView('history', true);
+      } else if (!mini) chooseNextFile();
     } catch (e) {
       notify(`无法切换窗口模式：${String(e)}`, true);
       try {
@@ -135,7 +139,10 @@
       saveSetting('mini-mode', false);
       await resizeMode(false);
       await tick();
-      chooseNextFile();
+      if (repo && !repo.files.length) {
+        historyMode = 'graph';
+        await changeView('history', true);
+      } else chooseNextFile();
     } catch (e) {
       notify(`无法返回完整模式：${String(e)}`, true);
     } finally {
@@ -155,6 +162,7 @@
   let busy = $state('');
   let refreshing = $state(false);
   let view = $state<'changes' | 'history'>('changes');
+  let autoHistory = false;
   let mode = $state(readSetting<string>('diff-mode', 'split'));
   let theme = $state(readSetting<string>('theme', 'dark'));
   let filter = $state('');
@@ -297,12 +305,14 @@
       historyMode = 'graph';
       currentCommit = null;
       view = 'changes';
+      autoHistory = false;
       filter = '';
       commitMessage = readSetting(`draft:${next.root}`, '');
       recents = [next.root, ...recents.filter((p) => p !== next.root)].slice(0, 8);
       saveSetting('recents', recents);
       saveSetting('last-repository', next.root);
-      chooseNextFile();
+      if (!mini && !next.files.length) await changeView('history', true);
+      else chooseNextFile();
     } catch (e) {
       notify(String(e), true);
     } finally {
@@ -334,6 +344,7 @@
     selected = null;
     diff = null;
     view = 'changes';
+    autoHistory = false;
     history = [];
     gitLog = { output: '', hasMore: false };
     gitLogLimit = 100;
@@ -342,7 +353,8 @@
     modal = null;
     commitMessage = '';
     clearNotices();
-    chooseNextFile();
+    if (!mini && !repo.files.length) await changeView('history', true);
+    else chooseNextFile();
   }
 
   function chooseNextFile() {
@@ -401,10 +413,20 @@
         previousFile?.index !== nextFile?.index ||
         previousFile?.worktree !== nextFile?.worktree ||
         previousFile?.conflict !== nextFile?.conflict;
+      const becameClean = !mini && view === 'changes' && repo.files.length > 0 && !next.files.length;
+      const returnToChanges = !mini && autoHistory && view === 'history' && next.files.length > 0;
       repo = next;
       await loadRemotes();
-      if (reloadSelected || selectedStatusChanged || !selected) chooseNextFile();
-      if (view === 'history') {
+      if (repo?.root !== root) return;
+      if (becameClean) {
+        historyMode = 'graph';
+        await changeView('history', true);
+      } else if (returnToChanges) {
+        await changeView('changes');
+      } else {
+        if (reloadSelected || selectedStatusChanged || !selected) chooseNextFile();
+      }
+      if (view === 'history' && !becameClean) {
         void loadHistory();
         if (historyMode === 'log') void loadGitLog();
       }
@@ -459,8 +481,9 @@
     await mutate({ kind: 'commit', message: commitMessage }, '正在提交');
   }
 
-  async function changeView(next: typeof view) {
+  async function changeView(next: typeof view, automatic = false) {
     if (mini) return;
+    autoHistory = automatic && next === 'history';
     if (view === next) return;
     diffSequence++;
     diffLoading = false;
@@ -566,6 +589,7 @@
       }
     }
     repo = null;
+    autoHistory = false;
     demo = false;
     diff = null;
     selected = null;
@@ -661,7 +685,10 @@
           modal = null;
           saveSetting('mini-mode', false);
           saveSetting('menu-bar-mode', false);
-          chooseNextFile();
+          if (repo && !repo.files.length) {
+            historyMode = 'graph';
+            void changeView('history', true);
+          } else chooseNextFile();
         });
         if (disposed) restore();
         else cleanups.push(restore);
