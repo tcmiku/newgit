@@ -68,7 +68,7 @@ index 4a7ce83..b1f693d 100644
 +}
 `,
   'README.md':
-    '--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,5 @@\n # GitPane\n \n-A Git client.\n+A little less overhead. A lot more focus.\n+\n+Your familiar Git workflow, in its own workspace.\n',
+    '--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,5 @@\n # gitpane\n \n-A Git client.\n+A little less overhead. A lot more focus.\n+\n+Your familiar Git workflow, in its own workspace.\n',
   'package.json':
     '--- a/package.json\n+++ b/package.json\n@@ -1,4 +1,4 @@\n {\n   "name": "gitpane",\n-  "version": "0.0.1"\n+  "version": "0.1.0"\n }\n',
 };
@@ -77,7 +77,7 @@ export function demoDiff(path: string): Diff {
   return {
     patch:
       patches[path] ??
-      `--- a/${path}\n+++ b/${path}\n@@ -1,3 +1,4 @@\n // GitPane workspace\n-export const enabled = false;\n+export const enabled = true;\n+export const debounce = 250;\n \n`,
+      `--- a/${path}\n+++ b/${path}\n@@ -1,3 +1,4 @@\n // gitpane workspace\n-export const enabled = false;\n+export const enabled = true;\n+export const debounce = 250;\n \n`,
     binary: false,
     truncated: false,
     canStageHunks: false,
@@ -124,7 +124,7 @@ export const demoHistory: Commit[] = [
   {
     oid: '391ad6e0000000000000000000000000000000000',
     short: '391ad6e',
-    subject: 'chore: initialize GitPane',
+    subject: 'chore: initialize gitpane',
     author: 'Alex Chen',
     date: '2026-09-21T11:30:00+08:00',
     refs: 'main',
@@ -142,4 +142,4 @@ export const demoGitLog = `* a7d23f1 (HEAD -> feat/workspace) feat: remember the
 | * d319a44 (tag: v0.1.0, origin/feat/graph, feat/graph) feat: draw branch and merge lanes  [Sam Lin · 2026-09-22]
 * | 8be043d (origin/feat/workspace) feat: add keyboard navigation  [Alex Chen · 2026-09-22]
 |/
-* 391ad6e (main) chore: initialize GitPane  [Alex Chen · 2026-09-21]`;
+* 391ad6e (main) chore: initialize gitpane  [Alex Chen · 2026-09-21]`;

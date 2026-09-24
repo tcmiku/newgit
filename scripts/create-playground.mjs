@@ -7,7 +7,7 @@ mkdirSync(base, { recursive: true });
 const root = mkdtempSync(join(base, 'playground-'));
 const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe', windowsHide: true });
 git('init', '-b', 'main');
-git('config', 'user.name', 'GitPane Playground');
+git('config', 'user.name', 'gitpane Playground');
 git('config', 'user.email', 'playground@gitpane.invalid');
 git('config', 'commit.gpgsign', 'false');
 git('config', 'core.autocrlf', 'false');
@@ -40,14 +40,14 @@ export function closeRepository(path: string) {
 }
 `;
 writeFileSync(join(root, 'src/lib/repository.ts'), initial);
-writeFileSync(join(root, 'README.md'), '# GitPane Playground\n\nA safe place to try GitPane.\n');
+writeFileSync(join(root, 'README.md'), '# gitpane Playground\n\nA safe place to try gitpane.\n');
 writeFileSync(join(root, 'package.json'), '{\n  "name": "playground",\n  "version": "0.0.1"\n}\n');
 git('add', '.');
 git('commit', '-m', 'chore: initialize workspace');
 git('switch', '-c', 'feat/workspace');
 writeFileSync(
   join(root, 'README.md'),
-  '# GitPane Playground\n\nA safe place to try GitPane.\n\nReview. Stage. Commit.\n',
+  '# gitpane Playground\n\nA safe place to try gitpane.\n\nReview. Stage. Commit.\n',
 );
 git('add', 'README.md');
 git('commit', '-m', 'docs: describe the daily workflow');
@@ -70,7 +70,7 @@ writeFileSync(
 );
 writeFileSync(
   join(root, 'README.md'),
-  '# GitPane Playground\n\nYour familiar Git workflow, in its own workspace.\n\nReview. Stage. Commit.\n',
+  '# gitpane Playground\n\nYour familiar Git workflow, in its own workspace.\n\nReview. Stage. Commit.\n',
 );
 git('add', 'README.md');
 writeFileSync(join(root, 'package.json'), '{\n  "name": "playground",\n  "version": "0.1.0"\n}\n');

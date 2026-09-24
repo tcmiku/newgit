@@ -4,7 +4,7 @@ import type { Request } from './types';
 export const native = isTauri();
 
 export async function request<T>(request: Request, repository: string | null): Promise<T> {
-  if (!native) throw new Error('请在 GitPane 桌面应用中打开本地仓库。');
+  if (!native) throw new Error('请在 gitpane 桌面应用中打开本地仓库。');
   return invoke<T>('git_request', { request, repository });
 }
 

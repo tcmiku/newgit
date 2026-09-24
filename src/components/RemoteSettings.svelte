@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { GitBranch, GearSix, ArrowsClockwise, Plus, ArrowUp, X, Check } from 'phosphor-svelte';
   import type { Mutation, RemoteInfo } from '../lib/types';
   let {
     remotes,
@@ -8,6 +9,7 @@
     branch,
     upstream,
     demo,
+    compact = false,
     onaction,
     onrefresh,
   }: {
@@ -18,6 +20,7 @@
     branch: string;
     upstream: string | null;
     demo: boolean;
+    compact?: boolean;
     onaction: (action: Mutation, label: string) => Promise<boolean | undefined>;
     onrefresh: () => void;
   } = $props();
@@ -56,15 +59,22 @@
 </script>
 
 <div class="remote-settings">
-  <p class="remote-summary">{branch} · {upstream ? `跟踪 ${upstream}` : '尚未设置跟踪分支'}</p>
+  <div class="remote-context">
+    <span><GitBranch size={15} />{branch}</span><span class:missing={!upstream}
+      >{upstream ? `跟踪 ${upstream}` : '未设置上游'}</span
+    >
+  </div>
   {#if demo}<p class="modal-note">只读演示；打开本地仓库后可以修改设置。</p>{/if}
   {#if loading}<p class="modal-note">正在读取远程仓库…</p>{/if}
   {#if error}<p role="alert">{error}</p>
     <button class="secondary" onclick={onrefresh}>重新读取</button>{/if}
+  <div class="remote-section-title"><span>远程仓库</span><span>{remotes.length}</span></div>
   <div class="remote-list">
     {#each remotes as remote (remote.name)}
       <article>
-        <strong>{remote.name}</strong>
+        <div class="remote-name">
+          <span class="remote-icon"><GearSix size={17} /></span><strong>{remote.name}</strong>
+        </div>
         <dl>
           <dt>Fetch</dt>
           <dd>{remote.fetchUrl}</dd>
@@ -73,7 +83,7 @@
         </dl>
         <div class="remote-buttons">
           <button class="secondary" disabled={disabled || loading} onclick={() => edit(remote)}
-            >编辑地址</button
+            ><GearSix size={13} />编辑</button
           >
           <button
             class="secondary"
@@ -84,18 +94,18 @@
               removing = null;
             }}>重命名</button
           >
-          <button
-            class="secondary"
-            disabled={disabled || loading}
-            onclick={() =>
-              onaction({ kind: 'remote', operation: 'fetch', remote: remote.name }, '正在获取远程更新')}
-            >Fetch</button
-          >
+          {#if !compact}<button
+              class="secondary"
+              disabled={disabled || loading}
+              onclick={() =>
+                onaction({ kind: 'remote', operation: 'fetch', remote: remote.name }, '正在获取远程更新')}
+              ><ArrowsClockwise size={13} />Fetch</button
+            >{/if}
           {#if !upstream}<button
               class="secondary"
               disabled={disabled || loading}
               onclick={() => onaction({ kind: 'publishBranch', remote: remote.name }, '正在发布分支')}
-              >发布到 {remote.name}</button
+              ><ArrowUp size={13} />发布分支</button
             >{/if}
           <button
             class="text-button"
@@ -103,7 +113,7 @@
             onclick={() => {
               removing = remote.name;
               renaming = null;
-            }}>移除</button
+            }}><X size={13} />移除</button
           >
         </div>
         {#if renaming === remote.name}
@@ -147,9 +157,7 @@
         {/if}
       </article>
     {:else}
-      {#if !loading && !error}<p class="modal-note">
-          尚未配置远程仓库。添加地址后即可 Fetch 或发布当前分支。
-        </p>{/if}
+      {#if !loading && !error}<p class="modal-note">尚未配置远程仓库，请先添加远程地址。</p>{/if}
     {/each}
   </div>
   <form
@@ -159,7 +167,9 @@
       void save();
     }}
   >
-    <strong>{editing ? `编辑 ${editing}` : '添加远程仓库'}</strong>
+    <strong class="form-heading"
+      ><span><Plus size={15} /></span>{editing ? `编辑 ${editing}` : '添加远程仓库'}</strong
+    >
     <label for="remote-name">名称</label>
     <input
       id="remote-name"
@@ -180,7 +190,7 @@
     <input id="remote-push" bind:value={pushUrl} placeholder="留空使用 Fetch 地址" {disabled} />
     <div class="remote-buttons">
       <button class="primary" disabled={disabled || loading || !!error || !name.trim() || !fetchUrl.trim()}
-        >{editing ? '保存地址' : '添加远程'}</button
+        ><Check size={14} />{editing ? '保存地址' : '添加远程'}</button
       >
       {#if editing}<button type="button" class="secondary" onclick={() => edit()}>取消编辑</button>{/if}
     </div>
@@ -189,28 +199,87 @@
 
 <style>
   .remote-settings {
-    padding: 0 22px 22px;
+    padding: 16px 18px 18px;
     min-height: 0;
     flex: 1;
     overflow: auto;
     font-size: 12px;
   }
-  .remote-summary {
-    color: var(--muted);
+  .remote-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 17px;
+  }
+  .remote-context span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--branch);
+    background: var(--surface-raised);
     overflow-wrap: anywhere;
+  }
+  .remote-context span + span {
+    color: var(--muted);
+  }
+  .remote-context .missing {
+    color: var(--warm);
+  }
+  .remote-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px;
+    color: var(--muted);
+    font-weight: 650;
+  }
+  .remote-section-title span:last-child {
+    min-width: 20px;
+    padding: 2px 6px;
+    border-radius: 7px;
+    background: var(--surface-inset);
+    color: var(--faint);
+    text-align: center;
+    font-size: 10px;
   }
   .remote-list article {
     border: 1px solid var(--border);
-    padding: 14px;
-    border-radius: 6px;
-    margin: 12px 0;
+    padding: 13px;
+    border-radius: var(--radius-card);
+    margin: 9px 0;
+    background: var(--surface-raised);
+    box-shadow: 0 3px 12px var(--surface-shadow);
+  }
+  .remote-name {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--text);
+  }
+  .remote-icon,
+  .form-heading span {
+    width: 27px;
+    height: 27px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    color: var(--branch);
+    background: #59dce720;
   }
   dl {
     display: grid;
     grid-template-columns: 40px minmax(0, 1fr);
-    gap: 6px;
+    gap: 5px;
     color: var(--muted);
     font-size: 11px;
+    margin: 11px 0 0 36px;
   }
   dd {
     margin: 0;
@@ -224,26 +293,44 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 11px;
+  }
+  .remote-buttons button {
+    min-height: 29px;
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .remote-buttons .text-button {
+    margin-left: auto;
+    color: var(--red);
   }
   .remote-form {
     display: grid;
+    gap: 7px;
+    margin-top: 15px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-raised);
+  }
+  .form-heading {
+    display: flex;
+    align-items: center;
     gap: 9px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
+    margin-bottom: 3px;
   }
   input {
     width: 100%;
     padding: 9px;
     border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--editor);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
     color: var(--text);
     font: inherit;
   }
   .remote-form label {
     color: var(--muted);
-    margin-top: 6px;
+    margin-top: 5px;
   }
   .remote-confirm {
     color: var(--warm);
