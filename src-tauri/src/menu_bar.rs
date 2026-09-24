@@ -148,6 +148,9 @@ pub fn set_mode(app: AppHandle, enabled: bool) -> Result<(), String> {
             .set_resizable(false)
             .map_err(|error| error.to_string())?;
         state.enabled.store(true, Ordering::SeqCst);
+        if let Some(tray) = app.tray_by_id(crate::SYSTEM_TRAY_ID) {
+            tray.set_visible(false).map_err(|error| error.to_string())?;
+        }
         *state.last_blur.lock().unwrap() = None;
         // AppKit initially reports a zero-height status item. Wait on the blocking
         // worker while its main run loop lays out the icon, then anchor the panel.
@@ -201,6 +204,9 @@ pub fn restore_window(app: &AppHandle) -> Result<(), String> {
     // set_visible dispatches its native work to the main thread through Tauri.
     if let Some(tray) = app.tray_by_id("gitpane-menu-bar") {
         tray.set_visible(false).map_err(|error| error.to_string())?;
+    }
+    if let Some(tray) = app.tray_by_id(crate::SYSTEM_TRAY_ID) {
+        tray.set_visible(true).map_err(|error| error.to_string())?;
     }
     Ok(())
 }

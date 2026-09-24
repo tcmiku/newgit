@@ -11,8 +11,15 @@ use std::{
     time::Duration,
 };
 use tauri::Emitter;
-#[cfg(target_os = "macos")]
-use tauri::Manager;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use tauri::{
+    image::Image,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WindowEvent,
+};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+const SYSTEM_TRAY_ID: &str = "gitpane-system-tray";
 
 #[derive(Default)]
 struct Repository {
@@ -267,19 +274,79 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn open_from_tray(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn setup_system_tray(app: &tauri::App) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "system-tray-open", "打开 gitpane", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "system-tray-quit", "退出 gitpane", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    #[cfg(target_os = "macos")]
+    let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+    #[cfg(target_os = "windows")]
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
+    let tray = TrayIconBuilder::with_id(SYSTEM_TRAY_ID)
+        .icon(icon)
+        .tooltip("gitpane · 点击打开，右键退出")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| {
+            if event.id() == "system-tray-open" {
+                open_from_tray(app);
+            } else if event.id() == "system-tray-quit" {
+                app.exit(0);
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                open_from_tray(tray.app_handle());
+            }
+        });
+    #[cfg(target_os = "macos")]
+    let tray = tray.icon_as_template(true);
+    tray.build(app)?;
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn hide_on_close(window: &tauri::Window, event: &WindowEvent) {
+    if window.label() == "main" {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = window.hide();
+        }
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Shared::default())
         .setup(|app| {
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            setup_system_tray(app)?;
             #[cfg(target_os = "macos")]
             app.manage(menu_bar::MenuBarState::default());
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            hide_on_close(window, event);
             #[cfg(target_os = "macos")]
             menu_bar::on_window_event(window, event);
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
