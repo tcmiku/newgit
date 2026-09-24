@@ -72,23 +72,25 @@
         >{menuBar ? 'BAR' : 'MINI'}</span
       >
     </button>
-    {#if onmenubar && !menuBar}<button
-        class="menu-bar-button"
-        onclick={onmenubar}
+    <div class="header-actions">
+      {#if onmenubar && !menuBar}<button
+          class="menu-bar-button"
+          onclick={onmenubar}
+          disabled={switching || !!busy || refreshing}
+          title="只在 macOS 菜单栏显示"
+          aria-label="移至菜单栏"><ArrowSquareOut size={17} /></button
+        >{/if}
+      <button class="icon-button" onclick={onsettings} title="应用设置" aria-label="应用设置"
+        ><GearSix size={18} /></button
+      >
+      <button
+        class="icon-button"
+        onclick={onexpand}
         disabled={switching || !!busy || refreshing}
-        title="只在 macOS 菜单栏显示"
-        aria-label="移至菜单栏"><ArrowSquareOut size={17} /></button
-      >{/if}
-    <button class="icon-button" onclick={onsettings} title="应用设置" aria-label="应用设置"
-      ><GearSix size={18} /></button
-    >
-    <button
-      class="icon-button"
-      onclick={onexpand}
-      disabled={switching || !!busy || refreshing}
-      title="切换到完整模式"
-      aria-label="切换到完整模式"><ArrowsOutSimple size={18} /></button
-    >
+        title="切换到完整模式"
+        aria-label="切换到完整模式"><ArrowsOutSimple size={18} /></button
+      >
+    </div>
   </header>
   {#if menuBar}<div class="panel-hint">
       <span>Esc 收起</span>
@@ -204,16 +206,28 @@
   header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     background: var(--topbar);
   }
   .repository {
+    flex: 1;
     min-width: 0;
+    justify-content: flex-start;
     padding: 4px 7px 4px 3px;
     border-radius: var(--radius-control);
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    flex: none;
+    gap: 4px;
+  }
+  .header-actions .icon-button,
+  .header-actions .menu-bar-button {
+    width: 28px;
+    height: 28px;
   }
   .repository:hover {
     background: var(--hover);

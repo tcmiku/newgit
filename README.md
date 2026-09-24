@@ -45,6 +45,8 @@ npm ci
 npm run desktop
 ```
 
+更新代码后如果 Vite 提示找不到 `@xterm/xterm` 等包，请先停止开发服务，在项目根目录重新运行 `npm ci`，然后再运行 `npm run desktop`。新增依赖不会随 Git 更新自动安装到已有的 `node_modules`。
+
 只预览前端可运行 `npm run dev`，打开终端显示的本地地址，再点击“试用演示”。浏览器演示只读；打开真实本地仓库需要桌面版。
 
 构建安装包：
