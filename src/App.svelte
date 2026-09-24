@@ -3,6 +3,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { LogicalSize } from '@tauri-apps/api/dpi';
+  import MiniView from './components/MiniView.svelte';
   import { open as chooseDirectory } from '@tauri-apps/plugin-dialog';
   import {
     GitBranch,
@@ -26,8 +28,9 @@
     Keyboard,
     ArrowRight,
     CheckCircle,
-    Circle,
     FileCode,
+    GearSix,
+    ArrowsInSimple,
   } from 'phosphor-svelte';
   import GraphView from './components/GraphView.svelte';
   import GitLogView from './components/GitLogView.svelte';
@@ -38,6 +41,52 @@
   import type { Snapshot, FileChange, Diff, Commit, GitLog, Branch, Mutation, RemoteInfo } from './lib/types';
 
   let repo = $state<Snapshot | null>(null);
+  let mini = $state(readSetting<boolean>('mini-mode', false));
+  let switchingMode = $state(false);
+  let fullSize = new LogicalSize(1320, 850);
+  let fullMaximized = false;
+
+  async function resizeMode(compact: boolean, remember = true) {
+    if (!native) return;
+    const win = getCurrentWebviewWindow();
+    if (compact && remember) {
+      fullMaximized = await win.isMaximized();
+      if (!fullMaximized) fullSize = (await win.innerSize()).toLogical(await win.scaleFactor());
+    }
+    await win.unmaximize();
+    await win.setMinSize(new LogicalSize(compact ? 380 : 860, compact ? 480 : 580));
+    await win.setSize(compact ? new LogicalSize(460, 620) : fullSize);
+    if (!compact && fullMaximized) await win.maximize();
+  }
+
+  async function toggleMini() {
+    if (switchingMode || busy || refreshing) return;
+    switchingMode = true;
+    try {
+      await resizeMode(!mini);
+      mini = !mini;
+      saveSetting('mini-mode', mini);
+      modal = null;
+      view = 'changes';
+      diffSequence++;
+      historySequence++;
+      gitLogSequence++;
+      diff = null;
+      selected = null;
+      currentCommit = null;
+      diffLoading = historyLoading = gitLogLoading = false;
+      if (!mini) chooseNextFile();
+    } catch (e) {
+      notify(`无法切换窗口模式：${String(e)}`, true);
+      try {
+        await resizeMode(mini, false);
+      } catch {
+        /* Keep the current interface usable. */
+      }
+    } finally {
+      switchingMode = false;
+    }
+  }
   let selected = $state<{ path: string; staged: boolean } | null>(null);
   let diff = $state<Diff | null>(null);
   let diffLoading = $state(false);
@@ -71,7 +120,6 @@
   let stagedExpanded = $state(true);
   let unstagedExpanded = $state(true);
   let demo = $state(false);
-  let refreshedAt = $state('');
   let dialogElement = $state<HTMLDivElement>();
   let diffSequence = 0;
   let historySequence = 0;
@@ -176,7 +224,6 @@
       saveSetting('recents', recents);
       saveSetting('last-repository', next.root);
       chooseNextFile();
-      refreshedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       notify(String(e), true);
     } finally {
@@ -186,7 +233,7 @@
 
   async function browse() {
     if (!native) {
-      notify('浏览器仅支持界面演示。请运行 GitPane 桌面应用来打开本地仓库。');
+      notify('浏览器仅支持界面演示。请运行 gitpane 桌面应用来打开本地仓库。');
       return;
     }
     try {
@@ -220,7 +267,7 @@
   }
 
   function chooseNextFile() {
-    if (!repo || view !== 'changes') return;
+    if (mini || !repo || view !== 'changes') return;
     if (selected) {
       const existing = repo.files.find((f) => f.path === selected!.path);
       if (existing && (selected.staged ? isStaged(existing) : isUnstaged(existing))) {
@@ -276,7 +323,6 @@
         void loadHistory();
         if (historyMode === 'log') void loadGitLog();
       }
-      refreshedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
       notify(String(e), true);
     } finally {
@@ -325,6 +371,7 @@
   }
 
   async function changeView(next: typeof view) {
+    if (mini) return;
     if (view === next) return;
     diffSequence++;
     diffLoading = false;
@@ -442,6 +489,7 @@
   }
 
   const actions = [
+    { label: '切换 Mini / 完整模式', key: '', run: toggleMini },
     { label: '打开仓库', key: `${mod} O`, run: browse },
     { label: '刷新仓库状态', key: `${mod} R`, run: refresh },
     { label: '查看变更', key: `${mod} ⇧ G`, run: () => changeView('changes') },
@@ -480,7 +528,7 @@
     }
     if (event.key.toLowerCase() === 'p') {
       event.preventDefault();
-      void showModal('commands');
+      if (!mini) void showModal('commands');
     }
     if (event.key.toLowerCase() === 'r') {
       event.preventDefault();
@@ -506,6 +554,15 @@
     window.addEventListener('focus', focus);
     if (native) {
       void (async () => {
+        if (mini) {
+          try {
+            await resizeMode(true, false);
+          } catch (e) {
+            mini = false;
+            saveSetting('mini-mode', false);
+            notify(String(e), true);
+          }
+        }
         const stop = await listen<string>('repository-changed', (event) => {
           if (event.payload === repo?.root && !document.hidden) focus();
         });
@@ -578,394 +635,380 @@
   </div>
 {/snippet}
 
-<div class="app-shell">
-  <aside class="activity-bar" aria-label="主导航">
-    <button
-      class="brand-mark"
-      title="GitPane 首页"
-      onclick={() => {
-        if (!busy) void showModal('repository');
-      }}><img src="/favicon.svg" alt="GitPane" /></button
-    >
-    <div class="activity-main">
+{#if mini}
+  <MiniView
+    {repo}
+    {busy}
+    {refreshing}
+    {demo}
+    switching={switchingMode}
+    bind:commitMessage
+    onopen={() => showModal('repository')}
+    onexpand={toggleMini}
+    onbranches={() => showModal('branches')}
+    onremotes={() => showModal('remotes')}
+    onpull={() => mutate({ kind: 'remote', operation: 'pull' }, '正在拉取')}
+    onpush={() =>
+      repo?.upstream ? mutate({ kind: 'remote', operation: 'push' }, '正在推送') : showModal('remotes')}
+    oncommit={commit}
+    onstage={stageFile}
+    onstageall={() => mutate({ kind: 'stage', paths: unstaged.map((f) => f.path) }, '正在暂存全部更改')}
+  />
+{:else}
+  <div class="app-shell">
+    <aside class="activity-bar" aria-label="主导航">
       <button
-        class:active={view === 'changes'}
-        onclick={() => changeView('changes')}
-        title="变更"
-        aria-label="变更"
-        ><GitBranch size={23} weight="light" />{#if repo?.files.length}<span class="activity-dot"
-          ></span>{/if}</button
+        class="brand-mark"
+        title="gitpane 首页"
+        onclick={() => {
+          if (!busy) void showModal('repository');
+        }}><img src="/app-icon.png" alt="gitpane" /></button
       >
-      <button
-        class:active={view === 'history'}
-        disabled={!repo}
-        onclick={() => changeView('history')}
-        title="提交历史"
-        aria-label="提交历史"><ClockCounterClockwise size={23} weight="light" /></button
-      >
-      <button onclick={() => showModal('repository')} title="仓库" aria-label="仓库"
-        ><FolderOpen size={23} weight="light" /></button
-      >
-    </div>
-    <div class="activity-bottom">
-      <button onclick={() => showModal('commands')} title="命令面板" aria-label="命令面板"
-        ><Command size={21} /></button
-      >
-      <button
-        onclick={() => (theme = theme === 'dark' ? 'light' : 'dark')}
-        title="切换明暗主题"
-        aria-label="切换明暗主题"
-        >{#if theme === 'dark'}<Sun size={21} weight="light" />{:else}<Moon
-            size={21}
-            weight="light"
-          />{/if}</button
-      >
-      <button onclick={() => showModal('help')} title="快捷键与关于" aria-label="快捷键与关于"
-        ><Keyboard size={21} weight="light" /></button
-      >
-    </div>
-  </aside>
-
-  <div class="workspace">
-    <header class="topbar">
-      <button class="repo-switcher" onclick={() => showModal('repository')} disabled={!!busy}>
-        <span class="repo-avatar">{repo ? repo.name.slice(0, 1).toUpperCase() : 'G'}</span>
-        <span>{repo?.name ?? 'GitPane'}<small>{repo ? '本地仓库' : '你的轻量 Git 工作空间'}</small></span>
-        <CaretDown size={13} />
-      </button>
-      <div class="topbar-center">
-        <span class="local-dot"></span>{demo ? '演示模式 · 只读' : 'LOCAL WORKSPACE'}
-      </div>
-      <div class="remote-actions">
-        <button disabled={!repo || !!busy} onclick={() => showModal('remotes')} title="管理远程地址与发布分支"
-          >远程设置</button
+      <div class="activity-main">
+        <button
+          class:active={view === 'changes'}
+          onclick={() => changeView('changes')}
+          title="变更"
+          aria-label="变更"
+          ><GitBranch size={23} weight="light" />{#if repo?.files.length}<span class="activity-dot"
+            ></span>{/if}</button
         >
         <button
-          disabled={!repo || !!busy || refreshing || demo}
-          onclick={() => mutate({ kind: 'remote', operation: 'fetch' }, '正在 Fetch')}
-          title="获取远程更新"><ArrowsClockwise size={15} />Fetch</button
+          class:active={view === 'history'}
+          disabled={!repo}
+          onclick={() => changeView('history')}
+          title="提交历史"
+          aria-label="提交历史"><ClockCounterClockwise size={23} weight="light" /></button
         >
-        <button
-          disabled={!repo || !!busy || refreshing || demo}
-          onclick={() => mutate({ kind: 'remote', operation: 'pull' }, '正在 Pull')}
-          title="仅快进拉取，不自动合并"
-          ><ArrowDown size={15} />Pull{#if repo?.behind}<span>{repo.behind}</span>{/if}</button
-        >
-        <button
-          disabled={!repo || !!busy || refreshing || demo}
-          onclick={() =>
-            repo?.upstream
-              ? mutate({ kind: 'remote', operation: 'push' }, '正在 Push')
-              : showModal('remotes')}
-          title="推送当前分支"
-          ><ArrowUp size={15} />{repo && !repo.upstream ? '发布分支' : 'Push'}{#if repo?.ahead}<span
-              >{repo.ahead}</span
-            >{/if}</button
+        <button onclick={() => showModal('repository')} title="仓库" aria-label="仓库"
+          ><FolderOpen size={23} weight="light" /></button
         >
       </div>
-    </header>
-
-    {#if repo}
-      <div class="workspace-content" class:history-workspace={view === 'history'}>
-        {#if view === 'history'}
-          {#key repo.root}
-            {#if historyMode === 'graph'}
-              <GraphView
-                commits={history}
-                selected={currentCommit?.oid ?? null}
-                loading={historyLoading}
-                {hasMore}
-                remoteNames={remotes.map((remote) => remote.name)}
-                bind:all={allHistory}
-                onselect={selectCommit}
-                onmore={() => loadHistory(true)}
-                onscope={changeHistoryScope}
-                onrefresh={() => loadHistory()}
-                onlog={openGitLog}
-              />
-            {:else}
-              <GitLogView
-                output={gitLog.output}
-                loading={gitLogLoading}
-                hasMore={gitLog.hasMore}
-                limit={gitLogLimit}
-                bind:all={allHistory}
-                ongraph={() => (historyMode = 'graph')}
-                onscope={changeHistoryScope}
-                onrefresh={() => loadGitLog()}
-                onmore={() => loadGitLog(Math.min(gitLogLimit + 100, 5000))}
-              />
-            {/if}
-          {/key}
-        {:else}
-          <aside class="source-panel">
-            <div class="source-heading">
-              <h1>{view === 'changes' ? '源代码管理' : '提交历史'}</h1>
-              <div>
-                <span class="subtle-label">{view === 'changes' ? repo.files.length : history.length}</span
-                ><button
-                  class="icon-button"
-                  onclick={refresh}
-                  disabled={!!busy || refreshing || demo}
-                  title="刷新仓库"
-                  aria-label="刷新仓库"
-                  ><ArrowsClockwise size={16} class={refreshing ? 'spinning' : ''} /></button
-                >
-              </div>
-            </div>
-            <div class="source-tabs">
-              <button class:active={view === 'changes'} onclick={() => changeView('changes')}>变更</button
-              ><button onclick={() => changeView('history')}>提交图</button><button onclick={openGitLog}
-                >Git 日志</button
-              >
-            </div>
-            {#if view === 'changes'}
-              <div class="commit-box">
-                <label for="commit-message">提交说明</label>
-                <textarea
-                  id="commit-message"
-                  bind:value={commitMessage}
-                  placeholder="这次做了什么改动？"
-                  rows="3"
-                  disabled={!!busy || demo}></textarea>
-                <div class="commit-hint"><span>{staged.length} 个文件已暂存</span><kbd>{mod} ↵</kbd></div>
-                <button
-                  class="primary commit-button"
-                  onclick={commit}
-                  disabled={!commitMessage.trim() ||
-                    !staged.length ||
-                    !!busy ||
-                    refreshing ||
-                    !!conflicts ||
-                    demo}><Check size={16} weight="bold" />提交暂存更改</button
-                >
-              </div>
-              <div class="file-filter">
-                <MagnifyingGlass size={14} /><input
-                  aria-label="筛选更改文件"
-                  bind:value={filter}
-                  placeholder="筛选文件…"
-                />{#if filter}<button class="icon-button" onclick={() => (filter = '')} aria-label="清除筛选"
-                    ><X size={12} /></button
-                  >{/if}
-              </div>
-              <div class="file-groups">
-                <div class="group-heading">
-                  <button onclick={() => (stagedExpanded = !stagedExpanded)} aria-expanded={stagedExpanded}
-                    >{#if stagedExpanded}<CaretDown size={12} />{:else}<CaretRight size={12} />{/if}暂存的更改
-                    <span>{staged.length}</span></button
-                  ><button
-                    class="icon-button"
-                    disabled={!staged.length || !!busy || refreshing || demo}
-                    onclick={() =>
-                      mutate({ kind: 'unstage', paths: staged.map((f) => f.path) }, '正在取消全部暂存')}
-                    title="取消全部暂存"
-                    aria-label="取消全部暂存"><Minus size={14} /></button
-                  >
-                </div>
-                {#if stagedExpanded}{#each filteredStaged as file (file.path)}{@render fileRow(
-                      file,
-                      true,
-                    )}{/each}{#if !staged.length}<p class="group-empty">
-                      暂存后，这些更改将包含在提交中
-                    </p>{/if}{/if}
-                <div class="group-heading unstaged-heading">
-                  <button
-                    onclick={() => (unstagedExpanded = !unstagedExpanded)}
-                    aria-expanded={unstagedExpanded}
-                    >{#if unstagedExpanded}<CaretDown size={12} />{:else}<CaretRight size={12} />{/if}更改
-                    <span>{unstaged.length}</span></button
-                  ><button
-                    class="icon-button"
-                    disabled={!unstaged.length || !!busy || refreshing || demo || !!conflicts}
-                    onclick={() =>
-                      mutate({ kind: 'stage', paths: unstaged.map((f) => f.path) }, '正在暂存全部更改')}
-                    title="暂存全部更改"
-                    aria-label="暂存全部更改"><Plus size={14} /></button
-                  >
-                </div>
-                {#if unstagedExpanded}{#each filteredUnstaged as file (file.path)}{@render fileRow(
-                      file,
-                      false,
-                    )}{/each}{#if !unstaged.length}<p class="group-empty">工作区没有未暂存的更改</p>{/if}{/if}
-                {#if filter && !filteredStaged.length && !filteredUnstaged.length}<p class="group-empty">
-                    没有匹配的文件
-                  </p>{/if}
-              </div>
-              <div class="source-tip"><Keyboard size={15} /><span>小步提交，让每次改动更清晰。</span></div>
-            {/if}
-            <button class="branch-switcher" onclick={() => showModal('branches')} disabled={!!busy}
-              ><GitBranch size={16} /><span>{repo.branch}</span><CaretDown size={13} /></button
-            >
-          </aside>
-        {/if}
-
-        <main class="main-panel">
-          {#if repo.merging || conflicts}<div class="conflict-notice">
-              <WarningCircle size={16} /><span
-                >{conflicts
-                  ? `${conflicts} 个文件存在冲突。请在编辑器中解决，确认后逐个暂存。`
-                  : '仓库正在合并或变基，请确认操作状态后继续。'}</span
-              >
-            </div>{/if}
-          {#if view === 'changes' && selected}
-            <div class="editor-tabbar">
-              <div class="editor-tab">
-                <FileCode size={15} /><span>{basename(selected.path)}</span><span class="tab-status"
-                  >{selected.staged ? '暂存' : '工作区'}</span
-                >
-              </div>
-              <span class="editor-tab-trail">差异审查</span>
-            </div>
-            <div class="review-heading">
-              <div>
-                <span class="eyebrow">REVIEW YOUR CHANGES</span>
-                <h2>{selected.staged ? '准备好提交的改动' : '每一处改动，清晰可见。'}</h2>
-              </div>
-              <button
-                class="secondary"
-                disabled={!!busy || refreshing || demo}
-                onclick={() => activeFile && stageFile(activeFile, selected!.staged)}
-                >{#if selected.staged}<Minus size={14} />取消暂存{:else}<Plus
-                    size={14}
-                  />{activeFile?.conflict ? '标记已解决并暂存' : '暂存文件'}{/if}</button
-              >
-            </div>
-            <DiffView
-              {diff}
-              path={selected.path}
-              staged={selected.staged}
-              loading={diffLoading}
-              busy={!!busy || refreshing}
-              onhunk={stageHunk}
-              bind:mode
-            />
-          {:else if view === 'history' && currentCommit}
-            <div class="editor-tabbar">
-              <div class="editor-tab"><GitCommit size={15} /><span>{currentCommit.short}</span></div>
-              <span class="editor-tab-trail">提交详情</span>
-            </div>
-            <div class="review-heading commit-detail">
-              <div>
-                <span class="eyebrow"
-                  >{currentCommit.author} · {new Date(currentCommit.date).toLocaleString('zh-CN')}</span
-                >
-                <h2>{currentCommit.subject}</h2>
-              </div>
-            </div>
-            <DiffView
-              {diff}
-              path={`commit ${currentCommit.short}`}
-              historical
-              staged
-              loading={diffLoading}
-              bind:mode
-            />
-          {:else}
-            <div class="clean-workspace">
-              <div class="clean-icon"><CheckCircle size={46} weight="light" /></div>
-              <span class="eyebrow">ALL CLEAR</span>
-              <h2>{view === 'history' ? '从第一次提交开始' : '工作区，一切就绪。'}</h2>
-              <p>
-                {view === 'history'
-                  ? '你的项目历史将在这里展开。'
-                  : '在你喜欢的编辑器中继续创作。保存文件后，改动会自动出现在这里。'}
-              </p>
-              <div class="clean-repo"><GitBranch size={15} />{repo.branch}<span>·</span>{repo.name}</div>
-              <button class="secondary" onclick={refresh} disabled={refreshing || !!busy || demo}
-                ><ArrowsClockwise size={14} />刷新仓库</button
-              >
-            </div>
-          {/if}
-        </main>
+      <div class="activity-bottom">
+        <button onclick={() => showModal('commands')} title="命令面板" aria-label="命令面板"
+          ><Command size={21} /></button
+        >
+        <button
+          onclick={() => (theme = theme === 'dark' ? 'light' : 'dark')}
+          title="切换明暗主题"
+          aria-label="切换明暗主题"
+          >{#if theme === 'dark'}<Sun size={21} weight="light" />{:else}<Moon
+              size={21}
+              weight="light"
+            />{/if}</button
+        >
+        <button onclick={() => showModal('help')} title="快捷键与关于" aria-label="快捷键与关于"
+          ><Keyboard size={21} weight="light" /></button
+        >
       </div>
-    {:else}
-      <main class="welcome">
-        <div class="welcome-copy">
-          <div class="welcome-kicker"><span class="local-dot"></span>更专注的本地工作空间</div>
-          <h1>熟悉的 Git。<br /><span>轻一点，快一点。</span></h1>
-          <p>从查看第一处差异，到提交最后一行改动。<br />把你熟悉的操作，放进一个刚刚好的窗口。</p>
-          <div class="welcome-actions">
-            <button class="primary" onclick={browse} disabled={!!busy}
-              ><FolderOpen size={18} />打开本地仓库<span>{mod} O</span></button
-            ><button class="text-button" onclick={loadDemo}>先看看界面<ArrowRight size={16} /></button>
-          </div>
-          <div class="welcome-principles">
-            <span><Check size={14} />无需登录</span><span><Check size={14} />代码留在本地</span><span
-              ><Check size={14} />沿用 Git 配置</span
-            >
-          </div>
-          {#if recents.length}<div class="recent-welcome">
-              <span class="eyebrow">最近打开</span>{#each recents.slice(0, 3) as path}<button
-                  onclick={() => openRepository(path)}
-                  disabled={!!busy}
-                  ><FolderOpen size={15} /><span>{basename(path)}<small>{path}</small></span><ArrowRight
-                    size={14}
-                  /></button
-                >{/each}
-            </div>{/if}
-        </div>
-        <div class="welcome-art" aria-hidden="true">
-          <div class="art-caption">
-            <img src="/favicon.svg" alt="" />gitpane<span>一个窗口，专注改动。</span>
-          </div>
-          <div class="art-branch">
-            <GitBranch size={16} />feat / something-great<Circle size={9} weight="fill" />
-          </div>
-          <div class="art-diff">
-            <span class="art-context"> import &#123; idea &#125; from './you';</span><span
-              class="art-context"
-            >
-            </span><span class="art-removed">− const workspace = everything;</span><span class="art-added"
-              >+ const workspace = whatMatters;</span
-            ><span class="art-context"> </span><span class="art-context">
-              export default yourNextCommit;</span
-            >
-          </div>
-          <div class="art-commit">
-            <span><CheckCircle size={18} />Ready for your next commit</span><kbd>⌘ ↵</kbd>
-          </div>
-          <div class="art-bottom">
-            <span><GitBranch size={13} />main</span><span>LESS FRICTION. MORE FLOW.</span>
-          </div>
-        </div>
-        <div class="welcome-bottom">
-          <span>GitPane <b>0.1</b></span><span>Windows & macOS · 为日常开发而造</span><button
-            onclick={() => showModal('help')}>键盘快捷键<Keyboard size={15} /></button
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <button
+          class="repo-switcher"
+          onclick={() => showModal('repository')}
+          disabled={!!busy}
+          title="切换仓库"
+        >
+          <span class="repo-avatar">{repo ? repo.name.slice(0, 1).toUpperCase() : 'G'}</span>
+          <span>{repo?.name ?? 'gitpane'}</span>
+          <CaretDown size={13} />
+        </button>
+        <div class="remote-actions">
+          <button
+            onclick={toggleMini}
+            disabled={switchingMode || !!busy || refreshing}
+            title="Mini 模式"
+            aria-label="Mini 模式"><ArrowsInSimple size={18} /></button
+          >
+          <button
+            disabled={!repo || !!busy}
+            onclick={() => showModal('remotes')}
+            title="远程设置"
+            aria-label="远程设置"><GearSix size={18} /></button
+          >
+          <button
+            disabled={!repo || !!busy || refreshing || demo}
+            onclick={() => mutate({ kind: 'remote', operation: 'fetch' }, '正在 Fetch')}
+            title="获取远程更新"
+            aria-label="Fetch"><ArrowsClockwise size={18} /></button
+          >
+          <button
+            disabled={!repo || !!busy || refreshing || demo}
+            onclick={() => mutate({ kind: 'remote', operation: 'pull' }, '正在 Pull')}
+            title="拉取（仅快进）"
+            aria-label="Pull"
+            ><ArrowDown size={18} />{#if repo?.behind}<span>{repo.behind}</span>{/if}</button
+          >
+          <button
+            disabled={!repo || !!busy || refreshing || demo}
+            onclick={() =>
+              repo?.upstream
+                ? mutate({ kind: 'remote', operation: 'push' }, '正在 Push')
+                : showModal('remotes')}
+            title={repo && !repo.upstream ? '发布分支' : '推送当前分支'}
+            aria-label={repo && !repo.upstream ? '发布分支' : 'Push'}
+            ><ArrowUp size={18} />{#if repo?.ahead}<span>{repo.ahead}</span>{/if}</button
           >
         </div>
-      </main>
-    {/if}
+      </header>
 
-    <footer class="statusbar">
-      <div>
-        {#if repo}<button onclick={() => showModal('branches')} disabled={!!busy}
-            ><GitBranch size={13} />{repo.branch}</button
-          ><span class="sync-count"
-            ><ArrowDown size={11} />{repo.behind}<ArrowUp size={11} />{repo.ahead}</span
-          >{:else}<span><GitBranch size={13} />GitPane</span>{/if}
-      </div>
-      <div class="status-message" aria-live="polite">
-        {#if busy || refreshing}<ArrowsClockwise size={12} class="spinning" />{busy || '正在刷新'}{:else}<span
-            class="local-dot"
-          ></span>{demo ? '只读演示 · 不会修改本地文件' : repo ? '工作区已同步' : '就绪'}{/if}
-      </div>
-      <div>
-        <span class="status-path" title={repo?.root}
-          >{repo ? (demo ? 'DEMO' : `更新于 ${refreshedAt}`) : 'LOCAL FIRST'}</span
-        ><button onclick={() => showModal('commands')} title="命令面板"
-          ><Command size={12} /><span>{mod} P</span></button
-        >
-      </div>
-    </footer>
+      {#if repo}
+        <div class="workspace-content" class:history-workspace={view === 'history'}>
+          {#if view === 'history'}
+            {#key repo.root}
+              {#if historyMode === 'graph'}
+                <GraphView
+                  commits={history}
+                  selected={currentCommit?.oid ?? null}
+                  loading={historyLoading}
+                  {hasMore}
+                  remoteNames={remotes.map((remote) => remote.name)}
+                  bind:all={allHistory}
+                  onselect={selectCommit}
+                  onmore={() => loadHistory(true)}
+                  onscope={changeHistoryScope}
+                  onrefresh={() => loadHistory()}
+                  onlog={openGitLog}
+                />
+              {:else}
+                <GitLogView
+                  output={gitLog.output}
+                  loading={gitLogLoading}
+                  hasMore={gitLog.hasMore}
+                  limit={gitLogLimit}
+                  bind:all={allHistory}
+                  ongraph={() => (historyMode = 'graph')}
+                  onscope={changeHistoryScope}
+                  onrefresh={() => loadGitLog()}
+                  onmore={() => loadGitLog(Math.min(gitLogLimit + 100, 5000))}
+                />
+              {/if}
+            {/key}
+          {:else}
+            <aside class="source-panel">
+              <div class="source-heading">
+                <h1>{view === 'changes' ? '源代码管理' : '提交历史'}</h1>
+                <div>
+                  <span class="subtle-label">{view === 'changes' ? repo.files.length : history.length}</span
+                  ><button
+                    class="icon-button"
+                    onclick={refresh}
+                    disabled={!!busy || refreshing || demo}
+                    title="刷新仓库"
+                    aria-label="刷新仓库"
+                    ><ArrowsClockwise size={16} class={refreshing ? 'spinning' : ''} /></button
+                  >
+                </div>
+              </div>
+              <div class="source-tabs">
+                <button
+                  class:active={view === 'changes'}
+                  onclick={() => changeView('changes')}
+                  title="变更"
+                  aria-label="变更"><FileCode size={17} /></button
+                ><button onclick={() => changeView('history')} title="提交图" aria-label="提交图"
+                  ><GitCommit size={17} /></button
+                ><button onclick={openGitLog} title="Git 日志" aria-label="Git 日志"
+                  ><Command size={17} /></button
+                >
+              </div>
+              {#if view === 'changes'}
+                <div class="commit-box">
+                  <textarea
+                    id="commit-message"
+                    aria-label="提交说明"
+                    bind:value={commitMessage}
+                    placeholder="这次做了什么改动？"
+                    rows="3"
+                    disabled={!!busy || demo}></textarea>
+                  <button
+                    class="primary commit-button"
+                    onclick={commit}
+                    disabled={!commitMessage.trim() ||
+                      !staged.length ||
+                      !!busy ||
+                      refreshing ||
+                      !!conflicts ||
+                      demo}
+                    title="提交暂存更改"
+                    ><Check size={16} weight="bold" />提交 <span>{staged.length}</span></button
+                  >
+                </div>
+                <div class="file-filter">
+                  <MagnifyingGlass size={14} /><input
+                    aria-label="筛选更改文件"
+                    bind:value={filter}
+                    placeholder="筛选文件…"
+                  />{#if filter}<button
+                      class="icon-button"
+                      onclick={() => (filter = '')}
+                      aria-label="清除筛选"><X size={12} /></button
+                    >{/if}
+                </div>
+                <div class="file-groups">
+                  <div class="group-heading">
+                    <button onclick={() => (stagedExpanded = !stagedExpanded)} aria-expanded={stagedExpanded}
+                      >{#if stagedExpanded}<CaretDown size={12} />{:else}<CaretRight
+                          size={12}
+                        />{/if}暂存的更改
+                      <span>{staged.length}</span></button
+                    ><button
+                      class="icon-button"
+                      disabled={!staged.length || !!busy || refreshing || demo}
+                      onclick={() =>
+                        mutate({ kind: 'unstage', paths: staged.map((f) => f.path) }, '正在取消全部暂存')}
+                      title="取消全部暂存"
+                      aria-label="取消全部暂存"><Minus size={14} /></button
+                    >
+                  </div>
+                  {#if stagedExpanded}{#each filteredStaged as file (file.path)}{@render fileRow(
+                        file,
+                        true,
+                      )}{/each}{/if}
+                  <div class="group-heading unstaged-heading">
+                    <button
+                      onclick={() => (unstagedExpanded = !unstagedExpanded)}
+                      aria-expanded={unstagedExpanded}
+                      >{#if unstagedExpanded}<CaretDown size={12} />{:else}<CaretRight size={12} />{/if}更改
+                      <span>{unstaged.length}</span></button
+                    ><button
+                      class="icon-button"
+                      disabled={!unstaged.length || !!busy || refreshing || demo || !!conflicts}
+                      onclick={() =>
+                        mutate({ kind: 'stage', paths: unstaged.map((f) => f.path) }, '正在暂存全部更改')}
+                      title="暂存全部更改"
+                      aria-label="暂存全部更改"><Plus size={14} /></button
+                    >
+                  </div>
+                  {#if unstagedExpanded}{#each filteredUnstaged as file (file.path)}{@render fileRow(
+                        file,
+                        false,
+                      )}{/each}{/if}
+                  {#if filter && !filteredStaged.length && !filteredUnstaged.length}<p class="group-empty">
+                      没有匹配的文件
+                    </p>{/if}
+                </div>
+              {/if}
+            </aside>
+          {/if}
+
+          <main class="main-panel">
+            {#if repo.merging || conflicts}<div class="conflict-notice">
+                <WarningCircle size={16} /><span
+                  >{conflicts
+                    ? `${conflicts} 个文件存在冲突。请在编辑器中解决，确认后逐个暂存。`
+                    : '仓库正在合并或变基，请确认操作状态后继续。'}</span
+                >
+              </div>{/if}
+            {#if view === 'changes' && selected}
+              <div class="review-heading">
+                <div class="review-file">
+                  <FileCode size={19} />
+                  <h2>{basename(selected.path)}</h2>
+                  <span class="tab-status">{selected.staged ? '暂存' : '工作区'}</span>
+                </div>
+                <button
+                  class="secondary"
+                  disabled={!!busy || refreshing || demo}
+                  onclick={() => activeFile && stageFile(activeFile, selected!.staged)}
+                  >{#if selected.staged}<Minus size={14} />取消暂存{:else}<Plus
+                      size={14}
+                    />{activeFile?.conflict ? '标记已解决并暂存' : '暂存文件'}{/if}</button
+                >
+              </div>
+              <DiffView
+                {diff}
+                path={selected.path}
+                staged={selected.staged}
+                loading={diffLoading}
+                busy={!!busy || refreshing}
+                onhunk={stageHunk}
+                bind:mode
+              />
+            {:else if view === 'history' && currentCommit}
+              <div class="review-heading commit-detail">
+                <div>
+                  <span class="eyebrow"
+                    >{currentCommit.short} · {currentCommit.author} · {new Date(
+                      currentCommit.date,
+                    ).toLocaleString('zh-CN')}</span
+                  >
+                  <h2>{currentCommit.subject}</h2>
+                </div>
+              </div>
+              <DiffView
+                {diff}
+                path={`commit ${currentCommit.short}`}
+                historical
+                staged
+                loading={diffLoading}
+                bind:mode
+              />
+            {:else}
+              <div class="clean-workspace">
+                <div class="clean-icon"><CheckCircle size={46} weight="light" /></div>
+                <h2>{view === 'history' ? '暂无提交' : '工作区已清空'}</h2>
+                <button
+                  class="secondary"
+                  onclick={refresh}
+                  disabled={refreshing || !!busy || demo}
+                  title="刷新仓库"
+                  aria-label="刷新仓库"><ArrowsClockwise size={17} /></button
+                >
+              </div>
+            {/if}
+          </main>
+        </div>
+      {:else}
+        <main class="welcome">
+          <div class="welcome-copy">
+            <div class="welcome-symbol"><img src="/app-icon.png" alt="gitpane 蓝发狐面角色" /></div>
+            <h1>gitpane<span>.</span></h1>
+            <p>打开仓库，开始工作。</p>
+            <div class="welcome-actions">
+              <button class="primary" onclick={browse} disabled={!!busy}
+                ><FolderOpen size={18} />打开仓库</button
+              ><button class="secondary" onclick={loadDemo} title="打开只读演示"
+                >试用演示<ArrowRight size={15} /></button
+              >
+            </div>
+            {#if recents.length}<div class="recent-welcome">
+                <span class="eyebrow">最近仓库</span>{#each recents.slice(0, 4) as path}<button
+                    onclick={() => openRepository(path)}
+                    disabled={!!busy}
+                    ><FolderOpen size={15} /><span>{basename(path)}<small>{path}</small></span><ArrowRight
+                      size={14}
+                    /></button
+                  >{/each}
+              </div>{/if}
+          </div>
+        </main>
+      {/if}
+
+      <footer class="statusbar">
+        <div>
+          {#if repo}<button onclick={() => showModal('branches')} disabled={!!busy}
+              ><GitBranch size={13} />{repo.branch}</button
+            ><span class="sync-count"
+              ><ArrowDown size={11} />{repo.behind}<ArrowUp size={11} />{repo.ahead}</span
+            >{:else}<span><GitBranch size={13} />gitpane</span>{/if}
+        </div>
+        <div class="status-message" aria-live="polite">
+          {#if busy || refreshing}<ArrowsClockwise size={12} class="spinning" />{busy ||
+              '正在刷新'}{:else}<span class="local-dot"></span>{demo ? '只读演示' : '就绪'}{/if}
+        </div>
+      </footer>
+    </div>
   </div>
-</div>
+{/if}
 
 {#if toast}
   <div class="toast" class:error={toast.error} role={toast.error ? 'alert' : 'status'}>
     {#if toast.error}<WarningCircle size={19} />{:else}<CheckCircle size={19} />{/if}
     <div>
-      <strong>{toast.error ? '操作未完成' : 'GitPane'}</strong>
+      <strong>{toast.error ? '操作未完成' : 'gitpane'}</strong>
       <p>{toast.text}</p>
     </div>
     <button class="icon-button" onclick={() => (toast = null)} aria-label="关闭提示"><X size={15} /></button>
@@ -975,6 +1018,7 @@
 {#if modal}
   <div
     class="modal-backdrop"
+    class:mini-backdrop={mini}
     role="presentation"
     onclick={(event) => {
       if (event.target === event.currentTarget) modal = null;
@@ -1014,6 +1058,7 @@
       </div>
       {#if modal === 'remotes'}
         <RemoteSettings
+          compact={mini}
           {remotes}
           loading={remotesLoading}
           error={remotesError}
@@ -1117,7 +1162,7 @@
       {:else}
         <div class="modal-body help-body">
           <div class="about-logo">
-            <img src="/favicon.svg" alt="" /><span>GitPane<small>0.1.0 · 本地 Git 工作空间</small></span>
+            <img src="/app-icon.png" alt="" /><span>gitpane<small>0.1.0 · 本地 Git 工作空间</small></span>
           </div>
           <p>查看差异、暂存、提交。把注意力留给代码。</p>
           {#each [[`${mod} O`, '打开仓库'], [`${mod} P`, '命令面板'], [`${mod} R`, '刷新仓库'], [`${mod} ⇧ G`, '查看变更'], [`${mod} ↵`, '提交暂存更改'], ['Esc', '关闭对话框']] as shortcut}<div
@@ -1131,7 +1176,7 @@
         </div>
       {/if}
       <div class="modal-footer">
-        <span>{busy || 'GitPane · 保持专注'}</span><span><kbd>esc</kbd> 关闭</span>
+        <span>{busy || 'gitpane · 保持专注'}</span><span><kbd>esc</kbd> 关闭</span>
       </div>
     </div>
   </div>

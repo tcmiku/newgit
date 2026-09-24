@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowsClockwise, GitBranch } from 'phosphor-svelte';
+  import { ArrowsClockwise, GitBranch, GitCommit } from 'phosphor-svelte';
 
   let {
     output,
@@ -27,13 +27,13 @@
 <section class="git-log" aria-label="Git 日志">
   <div class="git-log-header">
     <div>
-      <span class="kicker">REPOSITORY HISTORY</span>
       <h2>Git 日志</h2>
     </div>
     <div class="toolbar">
-      <button class="secondary" onclick={ongraph}>返回提交图</button>
-      <label for="git-log-scope">显示</label>
-      <select id="git-log-scope" bind:value={all} onchange={onscope}>
+      <button class="secondary" onclick={ongraph} title="提交图" aria-label="提交图"
+        ><GitCommit size={18} /></button
+      >
+      <select id="git-log-scope" aria-label="分支范围" bind:value={all} onchange={onscope}>
         <option value={true}>所有分支</option>
         <option value={false}>当前分支</option>
       </select>
@@ -42,9 +42,6 @@
       >
     </div>
   </div>
-  <p class="command">
-    git log --graph --topo-order --decorate=short --date=short {all ? '--all' : 'HEAD'} --max-count={limit}
-  </p>
   <div class="log-content">
     {#if loading && !output}<p class="empty">正在读取 Git 日志…</p>
     {:else if !output}<div class="empty"><GitBranch size={27} /><span>还没有提交</span></div>
@@ -53,7 +50,7 @@
         >{loading ? '正在加载…' : '加载更早的提交'}</button
       >{/if}
   </div>
-  <div class="status"><span>显示最近 {limit} 条提交以内的命令输出</span><span>Git 原生格式 · 只读</span></div>
+  <div class="status"><span>最多 {limit} 条</span></div>
 </section>
 
 <style>
@@ -75,13 +72,6 @@
     padding: 0 22px;
     border-bottom: 1px solid var(--border);
   }
-  .kicker {
-    font:
-      9px Consolas,
-      monospace;
-    letter-spacing: 1.4px;
-    color: var(--faint);
-  }
   h2 {
     margin: 5px 0 0;
     font-size: 19px;
@@ -96,7 +86,7 @@
   }
   .toolbar button {
     padding: 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-control);
   }
   .toolbar button:hover {
     background: var(--hover);
@@ -105,23 +95,11 @@
   .toolbar select {
     width: 105px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     color: var(--text);
     background: var(--panel);
     padding: 6px;
     font: inherit;
-  }
-  .command {
-    margin: 0;
-    padding: 12px 22px;
-    border-bottom: 1px solid var(--border);
-    color: var(--faint);
-    font:
-      10px Consolas,
-      monospace;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .log-content {
     min-height: 0;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowsClockwise, GitBranch, MagnifyingGlass, X } from 'phosphor-svelte';
+  import { ArrowsClockwise, GitBranch, MagnifyingGlass, X, Command } from 'phosphor-svelte';
   import type { Commit } from '../lib/types';
   import { layoutGraph, GRAPH_ROW_HEIGHT } from '../lib/graph';
 
@@ -34,7 +34,7 @@
   let viewportHeight = $state(540);
   let viewport = $state<HTMLDivElement>();
   const rowHeight = GRAPH_ROW_HEIGHT;
-  const colors = ['#83bc95', '#7c9fc9', '#cca871', '#b79bc8', '#73b9ae', '#c98f9b', '#acb579'];
+  const colors = ['#ffcf5c', '#59dce7', '#ff77aa', '#b899ff', '#7de8c3', '#ffad66', '#8baaff'];
   let graph = $derived(layoutGraph(commits));
   let start = $derived(Math.max(0, Math.min(graph.rows.length - 1, Math.floor(scrollTop / rowHeight)) - 8));
   let end = $derived(Math.min(graph.rows.length, start + Math.ceil(viewportHeight / rowHeight) + 16));
@@ -73,13 +73,13 @@
 <section class="graph-view" aria-label="Git 提交图" style={`--graph-width:${graph.width}px`}>
   <div class="graph-titlebar">
     <div>
-      <span class="graph-kicker">REPOSITORY HISTORY</span>
       <h2>提交图</h2>
     </div>
     <div class="graph-options">
-      <button class="graph-log-link" onclick={onlog}>打开 Git 日志</button>
-      <label for="graph-scope">显示</label>
-      <select id="graph-scope" bind:value={all} onchange={onscope}>
+      <button class="graph-log-link" onclick={onlog} title="Git 日志" aria-label="Git 日志"
+        ><Command size={18} /></button
+      >
+      <select id="graph-scope" aria-label="分支范围" bind:value={all} onchange={onscope}>
         <option value={true}>所有分支</option>
         <option value={false}>当前分支</option>
       </select>
@@ -178,7 +178,7 @@
       </div>
     {/if}
   </div>
-  <div class="graph-status"><span>{commits.length} 条提交已加载</span><span>点击提交查看差异</span></div>
+  <div class="graph-status"><span>{commits.length} 条提交</span></div>
 </section>
 
 <style>
@@ -222,7 +222,7 @@
   }
   .graph-log-link {
     padding: 6px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     color: var(--accent);
   }
   .graph-log-link:hover {
@@ -231,7 +231,7 @@
   .graph-options select {
     width: 105px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     color: var(--text);
     background: var(--panel);
     padding: 6px;
@@ -239,7 +239,7 @@
   }
   .graph-refresh {
     padding: 5px;
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     color: var(--muted);
   }
   .graph-refresh:hover {
@@ -370,7 +370,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: 999px;
     font:
       9px Consolas,
       monospace;
@@ -379,14 +379,14 @@
     color: var(--accent);
   }
   .graph-ref.remote {
-    background: #769bc01a;
-    border-color: #769bc047;
-    color: var(--type-color);
+    background: #59dce726;
+    border-color: #59dce777;
+    color: var(--branch);
   }
   .graph-ref.tag {
-    background: #c8a66e1c;
-    border-color: #c8a66e4d;
-    color: var(--warm);
+    background: #ff77aa26;
+    border-color: #ff77aa77;
+    color: var(--red);
   }
   .graph-ref.head {
     font-weight: 700;

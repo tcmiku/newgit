@@ -8,6 +8,7 @@
     branch,
     upstream,
     demo,
+    compact = false,
     onaction,
     onrefresh,
   }: {
@@ -18,6 +19,7 @@
     branch: string;
     upstream: string | null;
     demo: boolean;
+    compact?: boolean;
     onaction: (action: Mutation, label: string) => Promise<boolean | undefined>;
     onrefresh: () => void;
   } = $props();
@@ -84,13 +86,13 @@
               removing = null;
             }}>重命名</button
           >
-          <button
-            class="secondary"
-            disabled={disabled || loading}
-            onclick={() =>
-              onaction({ kind: 'remote', operation: 'fetch', remote: remote.name }, '正在获取远程更新')}
-            >Fetch</button
-          >
+          {#if !compact}<button
+              class="secondary"
+              disabled={disabled || loading}
+              onclick={() =>
+                onaction({ kind: 'remote', operation: 'fetch', remote: remote.name }, '正在获取远程更新')}
+              >Fetch</button
+            >{/if}
           {#if !upstream}<button
               class="secondary"
               disabled={disabled || loading}
@@ -147,9 +149,7 @@
         {/if}
       </article>
     {:else}
-      {#if !loading && !error}<p class="modal-note">
-          尚未配置远程仓库。添加地址后即可 Fetch 或发布当前分支。
-        </p>{/if}
+      {#if !loading && !error}<p class="modal-note">尚未配置远程仓库，请先添加远程地址。</p>{/if}
     {/each}
   </div>
   <form
@@ -202,8 +202,12 @@
   .remote-list article {
     border: 1px solid var(--border);
     padding: 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-card);
     margin: 12px 0;
+    background: var(--accent-soft);
+  }
+  .remote-list article > strong {
+    color: var(--branch);
   }
   dl {
     display: grid;
@@ -236,7 +240,7 @@
     width: 100%;
     padding: 9px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     background: var(--editor);
     color: var(--text);
     font: inherit;

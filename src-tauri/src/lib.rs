@@ -127,5 +127,5 @@ pub fn run() {
         .manage(Shared::default())
         .invoke_handler(tauri::generate_handler![git_request, launch_path])
         .run(tauri::generate_context!())
-        .expect("Unable to start GitPane");
+        .expect("Unable to start gitpane");
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GitPane",
+  "productName": "gitpane",
   "version": "0.1.0",
   "identifier": "dev.gitpane.desktop",
   "build": {
@@ -10,16 +10,18 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{
-      "label": "main",
-      "title": "GitPane",
-      "width": 1320,
-      "height": 850,
-      "minWidth": 860,
-      "minHeight": 580,
-      "backgroundColor": "#181b1e",
-      "dragDropEnabled": true
-    }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "gitpane",
+        "width": 1320,
+        "height": 850,
+        "minWidth": 860,
+        "minHeight": 580,
+        "backgroundColor": "#181b1e",
+        "dragDropEnabled": true
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; font-src 'self'"
     }

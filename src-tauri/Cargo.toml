@@ -2,7 +2,7 @@
 name = "gitpane"
 version = "0.1.0"
 description = "A focused, lightweight Git workspace"
-authors = ["GitPane"]
+authors = ["gitpane"]
 edition = "2021"
 rust-version = "1.85"
 

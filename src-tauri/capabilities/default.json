@@ -3,5 +3,12 @@
   "identifier": "default",
   "description": "Local main window and directory picker only",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "core:window:allow-set-size",
+    "core:window:allow-set-min-size",
+    "core:window:allow-unmaximize",
+    "core:window:allow-maximize"
+  ]
 }
