@@ -9,6 +9,7 @@
     Plus,
     Minus,
     Check,
+    X,
   } from 'phosphor-svelte';
   import { basename, isStaged, isUnstaged } from '../lib/types';
   import type { Snapshot, FileChange } from '../lib/types';
@@ -18,6 +19,7 @@
     refreshing,
     demo,
     switching,
+    menuBar,
     commitMessage = $bindable(''),
     onopen,
     onexpand,
@@ -28,12 +30,16 @@
     oncommit,
     onstage,
     onstageall,
+    onmenubar,
+    onquit,
+    onhide,
   }: {
     repo: Snapshot | null;
     busy: string;
     refreshing: boolean;
     demo: boolean;
     switching: boolean;
+    menuBar: boolean;
     commitMessage: string;
     onopen: () => void;
     onexpand: () => void;
@@ -44,6 +50,9 @@
     oncommit: () => void;
     onstage: (file: FileChange, staged: boolean) => void;
     onstageall: () => void;
+    onmenubar: (() => void) | null;
+    onquit: () => void;
+    onhide: () => void;
   } = $props();
   let staged = $derived(repo?.files.filter(isStaged) ?? []);
   let unstaged = $derived(repo?.files.filter(isUnstaged) ?? []);
@@ -55,9 +64,16 @@
   <header>
     <button class="repository" onclick={onopen} disabled={!!busy} title={repo?.root ?? '打开仓库'}>
       <img class="mini-brand" src="/app-icon.png" alt="" /><strong>{repo?.name ?? 'gitpane'}</strong><span
-        >MINI</span
+      >{menuBar ? '菜单栏' : 'MINI'}</span
       >
     </button>
+    {#if onmenubar && !menuBar}<button
+        class="menu-bar-button"
+        onclick={onmenubar}
+        disabled={switching || !!busy || refreshing}
+        title="只在 macOS 菜单栏显示"
+        >移至菜单栏</button
+      >{/if}
     <button
       class="icon-button"
       onclick={onexpand}
@@ -66,6 +82,10 @@
       aria-label="切换到完整模式"><ArrowsOutSimple size={18} /></button
     >
   </header>
+  {#if menuBar}<div class="panel-hint">
+      <span>点击外部或按 Esc 收起。</span>
+      <button onclick={onhide} aria-label="收起到菜单栏" title="收起到菜单栏"><X size={16} />收起</button>
+    </div>{/if}
   {#if repo}
     <section class="tools" aria-label="仓库操作">
       <button class="branch" onclick={onbranches} {disabled} title={`切换或创建分支：${repo.branch}`}
@@ -133,6 +153,7 @@
   {/if}
   <footer aria-live="polite">
     <span class="local-dot"></span>{busy || (refreshing ? '正在刷新…' : demo ? '只读演示' : '就绪')}
+    {#if menuBar}<button class="quit-button" onclick={onquit}>退出 GitPane</button>{/if}
   </footer>
 </main>
 
@@ -199,6 +220,28 @@
     background: var(--accent);
     padding: 3px 5px;
     border-radius: 7px;
+  }
+  .menu-bar-button,
+  .quit-button {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .panel-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-hint span { flex: 1; }
+  .menu-bar-button:hover,
+  .quit-button:hover {
+    color: var(--text);
+  }
+  .quit-button {
+    margin-left: auto;
   }
   .tools {
     display: flex;

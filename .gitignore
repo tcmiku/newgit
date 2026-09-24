@@ -8,6 +8,7 @@ src-tauri/icons/*
 !src-tauri/icons/icon.ico
 !src-tauri/icons/icon.icns
 !src-tauri/icons/icon-macos-source.png
+!src-tauri/icons/tray.png
 .DS_Store
 *.log
 artifacts/

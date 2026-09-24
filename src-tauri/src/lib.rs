@@ -1,4 +1,6 @@
 mod git;
+#[cfg(target_os = "macos")]
+mod menu_bar;
 
 use notify::{RecursiveMode, Watcher};
 use serde::Deserialize;
@@ -8,6 +10,8 @@ use std::{
     time::Duration,
 };
 use tauri::Emitter;
+#[cfg(target_os = "macos")]
+use tauri::Manager;
 
 #[derive(Default)]
 struct Repository {
@@ -121,11 +125,66 @@ fn launch_path() -> Option<String> {
     std::env::args().nth(1).filter(|arg| !arg.starts_with('-'))
 }
 
+#[tauri::command]
+async fn set_menu_bar_mode(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || menu_bar::set_mode(app, enabled))
+            .await
+            .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, enabled);
+        Err("菜单栏模式仅支持 macOS。".into())
+    }
+}
+
+#[tauri::command]
+fn hide_menu_bar_panel(app: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    menu_bar::hide_panel(app);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Shared::default())
-        .invoke_handler(tauri::generate_handler![git_request, launch_path])
-        .run(tauri::generate_context!())
-        .expect("Unable to start gitpane");
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.manage(menu_bar::MenuBarState::default());
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            menu_bar::on_window_event(window, event);
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
+        })
+        .invoke_handler(tauri::generate_handler![
+            git_request,
+            launch_path,
+            set_menu_bar_mode,
+            hide_menu_bar_panel,
+            quit_app
+        ])
+        .build(tauri::generate_context!())
+        .expect("Unable to start gitpane")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Err(error) = menu_bar::restore_window(app) {
+                    eprintln!("{error}");
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

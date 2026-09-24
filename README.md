@@ -25,6 +25,7 @@ npm run dev
 
 - Mini 模式：点击顶部「Mini 模式」切换到 460 × 620 的小窗口，保留拉取、推送、文件暂存与提交、远程设置、分支创建与切换。右上角展开按钮恢复完整模式与原窗口大小；重启记住模式。
 - Mini 模式不加载隐藏的差异与历史，沿用文件监听、提交草稿和 Ctrl / Cmd + Enter 提交快捷键。拉取沿用当前分支的 upstream，仅快进；没有 upstream 时，点击推送可选远程并首次发布分支。
+- macOS 菜单栏模式：从完整窗口或 Mini 窗口切换，隐藏 Dock 图标，在菜单栏图标正下方弹出 Mini 面板；点击外部、再次点击图标、「收起」或 Esc 后仅留菜单栏图标。点击图标打开面板，右键可恢复主窗口或退出。面板保留暂存、提交、拉取、推送与远程设置。启动始终显示窗口，再次打开应用也会恢复主窗口，避免隐藏后无法找回。
 - 打开本地仓库：文件夹选择、手动路径、拖放、最近仓库、重启恢复。
 - 更改与暂存区分组、文件搜索、状态标记。
 - 并排／行内文本差异、行号、基础语法着色、只渲染可见差异行。
@@ -65,6 +66,7 @@ npm run package
 Windows 生成 NSIS 安装程序；macOS 在 Mac 上生成 `.app` 和 `.dmg`。产物在 `src-tauri/target/release/bundle/`。应用自身不捆绑 Git；Windows 安装程序可引导安装缺失的 WebView2。
 
 修改 macOS Dock 图标时，编辑 `src-tauri/icons/icon-macos-source.png`，再运行 `swift scripts/generate-macos-icon.swift src-tauri/icons/icon-macos-source.png src-tauri/icons/icon.icns` 生成留有透明边距的 `.icns`。Windows 图标独立保留。
+菜单栏模板图标可运行 `swift scripts/generate-tray-icon.swift src-tauri/icons/tray.png` 重新生成。
 
 跨平台 CI 位于 `.github/workflows/desktop.yml`，在 Windows / macOS 分别运行检查、测试和可执行文件编译，不会自动发布。当前环境已在 macOS 验证前端构建、Rust 测试及 `.app` 构建；Windows 构建仍需验证。分发签名及 macOS 公证尚未配置。
 

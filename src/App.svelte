@@ -41,8 +41,13 @@
   import { basename, isStaged, isUnstaged } from './lib/types';
   import type { Snapshot, FileChange, Diff, Commit, GitLog, Branch, Mutation, RemoteInfo } from './lib/types';
 
+  const mac = navigator.userAgent.includes('Mac');
+  const mod = mac ? '⌘' : 'Ctrl';
+  // Always start with a reachable window, including after an interrupted tray session.
+  const initialMenuBar = false;
   let repo = $state<Snapshot | null>(null);
-  let mini = $state(readSetting<boolean>('mini-mode', false));
+  let menuBar = $state(initialMenuBar);
+  let mini = $state(readSetting<boolean>('mini-mode', false) || initialMenuBar);
   let switchingMode = $state(false);
   let fullSize = new LogicalSize(1320, 850);
   let fullMaximized = false;
@@ -61,7 +66,7 @@
   }
 
   async function toggleMini() {
-    if (switchingMode || busy || refreshing) return;
+    if (menuBar || switchingMode || busy || refreshing) return;
     switchingMode = true;
     try {
       await resizeMode(!mini);
@@ -87,6 +92,59 @@
     } finally {
       switchingMode = false;
     }
+  }
+
+  async function enterMenuBar() {
+    if (!native || !mac || menuBar || switchingMode || busy || refreshing) return;
+    const wasMini = mini;
+    switchingMode = true;
+    try {
+      if (!mini) await resizeMode(true);
+      await getCurrentWebviewWindow().setSize(new LogicalSize(420, 560));
+      mini = true;
+      menuBar = true;
+      saveSetting('menu-bar-mode', true);
+      modal = null;
+      await tick();
+      await invoke('set_menu_bar_mode', { enabled: true });
+    } catch (e) {
+      await invoke('set_menu_bar_mode', { enabled: false }).catch(() => {});
+      menuBar = false;
+      saveSetting('menu-bar-mode', false);
+      mini = wasMini;
+      if (!wasMini) await resizeMode(false).catch(() => {});
+      await getCurrentWebviewWindow().show().catch(() => {});
+      notify(`无法开启菜单栏模式：${String(e)}`, true);
+    } finally {
+      switchingMode = false;
+    }
+  }
+
+  async function leaveMenuBar() {
+    if (!menuBar || switchingMode || busy || refreshing) return;
+    switchingMode = true;
+    const win = getCurrentWebviewWindow();
+    try {
+      await invoke('set_menu_bar_mode', { enabled: false });
+      menuBar = false;
+      mini = false;
+      saveSetting('menu-bar-mode', false);
+      saveSetting('mini-mode', false);
+      await resizeMode(false);
+      await tick();
+      chooseNextFile();
+    } catch (e) {
+      notify(`无法返回完整模式：${String(e)}`, true);
+    } finally {
+      await win.show().catch(() => {});
+      await win.setFocus().catch(() => {});
+      switchingMode = false;
+    }
+  }
+
+  function expandMini() {
+    if (menuBar) void leaveMenuBar();
+    else void toggleMini();
   }
   let selected = $state<{ path: string; staged: boolean } | null>(null);
   let diff = $state<Diff | null>(null);
@@ -129,8 +187,6 @@
   let nextNoticeId = 0;
   const noticeTimers = new Map<number, ReturnType<typeof setTimeout>>();
   let refreshTimer: ReturnType<typeof setTimeout>;
-  const mac = navigator.userAgent.includes('Mac');
-  const mod = mac ? '⌘' : 'Ctrl';
   let staged = $derived(repo?.files.filter(isStaged) ?? []);
   let unstaged = $derived(repo?.files.filter(isUnstaged) ?? []);
   let conflicts = $derived(repo?.files.filter((f) => f.conflict).length ?? 0);
@@ -524,6 +580,10 @@
       modal = null;
       return;
     }
+    if (menuBar && event.key === 'Escape') {
+      void invoke('hide_menu_bar_panel');
+      return;
+    }
     if (modal && event.key === 'Tab') {
       const focusable = dialogElement?.querySelectorAll<HTMLElement>(
         'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
@@ -573,6 +633,17 @@
     window.addEventListener('focus', focus);
     if (native) {
       void (async () => {
+        saveSetting('menu-bar-mode', false);
+        const restore = await listen('menu-bar-restored', () => {
+          menuBar = false;
+          mini = false;
+          modal = null;
+          saveSetting('mini-mode', false);
+          saveSetting('menu-bar-mode', false);
+          chooseNextFile();
+        });
+        if (disposed) restore();
+        else cleanups.push(restore);
         if (mini) {
           try {
             await resizeMode(true, false);
@@ -662,9 +733,13 @@
     {refreshing}
     {demo}
     switching={switchingMode}
+    {menuBar}
     bind:commitMessage
     onopen={() => showModal('repository')}
-    onexpand={toggleMini}
+    onexpand={expandMini}
+    onmenubar={mac && native ? enterMenuBar : null}
+    onquit={() => invoke('quit_app')}
+    onhide={() => invoke('hide_menu_bar_panel')}
     onbranches={() => showModal('branches')}
     onremotes={() => showModal('remotes')}
     onpull={() => mutate({ kind: 'remote', operation: 'pull' }, '正在拉取')}
@@ -747,6 +822,12 @@
             ><GitBranch size={15} weight="bold" /><span>{repo.branch}</span><CaretDown size={11} /></button
           >{/if}
         <div class="remote-actions">
+          {#if mac && native}<button
+              onclick={enterMenuBar}
+              disabled={switchingMode || !!busy || refreshing}
+              title="移至菜单栏"
+              aria-label="菜单栏模式">菜单栏</button
+            >{/if}
           <button
             onclick={toggleMini}
             disabled={switchingMode || !!busy || refreshing}
