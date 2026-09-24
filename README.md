@@ -62,6 +62,8 @@ npm run package
 
 Windows 生成 NSIS 安装程序；macOS 在 Mac 上生成 `.app` 和 `.dmg`。产物在 `src-tauri/target/release/bundle/`。应用自身不捆绑 Git；Windows 安装程序可引导安装缺失的 WebView2。
 
+修改 macOS Dock 图标时，编辑 `src-tauri/icons/icon-macos-source.png`，再运行 `swift scripts/generate-macos-icon.swift src-tauri/icons/icon-macos-source.png src-tauri/icons/icon.icns` 生成留有透明边距的 `.icns`。Windows 图标独立保留。
+
 跨平台 CI 位于 `.github/workflows/desktop.yml`，在 Windows / macOS 分别运行检查、测试和可执行文件编译，不会自动发布。当前环境已在 macOS 验证前端构建、Rust 测试及 `.app` 构建；Windows 构建仍需验证。分发签名及 macOS 公证尚未配置。
 
 ## 测试
