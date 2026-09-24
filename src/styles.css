@@ -159,7 +159,8 @@ kbd {
   background: var(--hover);
   color: var(--text);
 }
-.activity-main > button.active {
+.activity-main > button.active,
+.activity-bottom > button.active {
   color: var(--accent);
   background: var(--accent-soft);
 }

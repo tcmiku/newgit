@@ -1,6 +1,7 @@
 mod git;
 #[cfg(target_os = "macos")]
 mod menu_bar;
+mod terminal;
 
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
@@ -357,6 +358,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Shared::default())
         .manage(CloseBehaviorState::default())
+        .manage(terminal::TerminalState::default())
         .setup(|app| {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             setup_system_tray(app)?;
@@ -378,11 +380,18 @@ pub fn run() {
             set_menu_bar_mode,
             hide_menu_bar_panel,
             quit_app,
-            set_close_behavior
+            set_close_behavior,
+            terminal::terminal_start,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_stop
         ])
         .build(tauri::generate_context!())
         .expect("Unable to start gitpane")
         .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                terminal::shutdown(app);
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 if let Err(error) = menu_bar::restore_window(app) {

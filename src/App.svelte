@@ -35,11 +35,13 @@
     ArrowsInSimple,
     TrayArrowDown,
     Power,
+    TerminalWindow,
   } from 'phosphor-svelte';
   import GraphView from './components/GraphView.svelte';
   import GitLogView from './components/GitLogView.svelte';
   import RemoteSettings from './components/RemoteSettings.svelte';
   import DiffView from './components/DiffView.svelte';
+  import TerminalPane from './components/TerminalPane.svelte';
   import { request, native, readSetting, saveSetting } from './lib/api';
   import { basename, isStaged, isUnstaged } from './lib/types';
   import type { Snapshot, FileChange, Diff, Commit, GitLog, Branch, Mutation, RemoteInfo } from './lib/types';
@@ -74,6 +76,7 @@
     try {
       await resizeMode(!mini);
       mini = !mini;
+      if (mini) terminalOpen = false;
       saveSetting('mini-mode', mini);
       modal = null;
       view = 'changes';
@@ -164,6 +167,8 @@
   let busy = $state('');
   let refreshing = $state(false);
   let view = $state<'changes' | 'history'>('changes');
+  let terminalOpen = $state(false);
+  let terminalEpoch = $state(0);
   let autoHistory = false;
   let mode = $state(readSetting<string>('diff-mode', 'split'));
   let theme = $state(readSetting<string>('theme', 'dark'));
@@ -262,6 +267,14 @@
     }
   }
 
+  function toggleTerminal() {
+    if (terminalOpen) {
+      terminalOpen = false;
+    } else if (native && repo && !demo && !mini) {
+      terminalOpen = true;
+    }
+  }
+
   async function showModal(kind: typeof modal) {
     modal = kind;
     query = '';
@@ -318,6 +331,7 @@
       historySequence++;
       gitLogSequence++;
       demo = false;
+      if (repo?.root !== next.root) terminalOpen = false;
       repo = next;
       remotes = [];
       await loadRemotes();
@@ -363,6 +377,7 @@
     historySequence++;
     gitLogSequence++;
     demo = true;
+    terminalOpen = false;
     repo = structuredClone(demoSnapshot);
     await loadRemotes();
     selected = null;
@@ -613,6 +628,7 @@
       }
     }
     repo = null;
+    terminalOpen = false;
     autoHistory = false;
     demo = false;
     diff = null;
@@ -627,6 +643,7 @@
 
   const actions = [
     { label: '切换 Mini / 完整模式', key: '', run: toggleMini },
+    { label: '切换终端', key: `${mod} + \``, run: toggleTerminal },
     { label: '打开仓库', key: `${mod} O`, run: browse },
     { label: '刷新仓库状态', key: `${mod} R`, run: refresh },
     { label: '查看变更', key: `${mod} ⇧ G`, run: () => changeView('changes') },
@@ -647,6 +664,12 @@
       void invoke('hide_menu_bar_panel');
       return;
     }
+    if (!modal && (event.metaKey || event.ctrlKey) && event.code === 'Backquote') {
+      event.preventDefault();
+      toggleTerminal();
+      return;
+    }
+    if (event.target instanceof Element && event.target.closest('.terminal-pane')) return;
     if (modal && event.key === 'Tab') {
       const focusable = dialogElement?.querySelectorAll<HTMLElement>(
         'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]',
@@ -869,6 +892,13 @@
         >
       </div>
       <div class="activity-bottom">
+        <button
+          class:active={terminalOpen}
+          onclick={toggleTerminal}
+          disabled={!native || !repo || demo}
+          title="切换终端 (Ctrl / Cmd + `)"
+          aria-label="切换终端"><TerminalWindow size={21} weight="light" /></button
+        >
         <button onclick={() => showModal('settings')} title="应用设置" aria-label="应用设置"
           ><GearSix size={21} weight="light" /></button
         >
@@ -1202,6 +1232,17 @@
               </div>{/if}
           </div>
         </main>
+      {/if}
+
+      {#if terminalOpen && repo && !demo}
+        {#key `${repo.root}:${terminalEpoch}`}
+          <TerminalPane
+            root={repo.root}
+            {theme}
+            onclose={() => (terminalOpen = false)}
+            onrestart={() => (terminalEpoch += 1)}
+          />
+        {/key}
       {/if}
 
       <footer class="statusbar">
