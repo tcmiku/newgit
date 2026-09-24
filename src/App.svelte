@@ -28,6 +28,7 @@
     Keyboard,
     ArrowRight,
     CheckCircle,
+    Info,
     FileCode,
     GearSix,
     ArrowsInSimple,
@@ -116,7 +117,8 @@
   let query = $state('');
   let pathInput = $state('');
   let newBranch = $state('');
-  let toast = $state<{ text: string; error: boolean } | null>(null);
+  type Notice = { id: number; text: string; kind: 'success' | 'error' | 'info' };
+  let notices = $state<Notice[]>([]);
   let stagedExpanded = $state(true);
   let unstagedExpanded = $state(true);
   let demo = $state(false);
@@ -124,7 +126,8 @@
   let diffSequence = 0;
   let historySequence = 0;
   let gitLogSequence = 0;
-  let toastTimer: ReturnType<typeof setTimeout>;
+  let nextNoticeId = 0;
+  const noticeTimers = new Map<number, ReturnType<typeof setTimeout>>();
   let refreshTimer: ReturnType<typeof setTimeout>;
   const mac = navigator.userAgent.includes('Mac');
   const mod = mac ? '⌘' : 'Ctrl';
@@ -148,10 +151,26 @@
     if (repo && !demo) saveSetting(`draft:${repo.root}`, commitMessage);
   });
 
-  function notify(text: string, error = false) {
-    clearTimeout(toastTimer);
-    toast = { text, error };
-    if (!error) toastTimer = setTimeout(() => (toast = null), 4500);
+  function dismissNotice(id: number) {
+    clearTimeout(noticeTimers.get(id));
+    noticeTimers.delete(id);
+    notices = notices.filter((notice) => notice.id !== id);
+  }
+
+  function clearNotices() {
+    for (const timer of noticeTimers.values()) clearTimeout(timer);
+    noticeTimers.clear();
+    notices = [];
+  }
+
+  function notify(text: string, error = false, info = false) {
+    const id = ++nextNoticeId;
+    notices = [{ id, text, kind: error ? 'error' : info ? 'info' : 'success' }, ...notices];
+    if (!error)
+      noticeTimers.set(
+        id,
+        setTimeout(() => dismissNotice(id), 4500),
+      );
   }
 
   async function showModal(kind: typeof modal) {
@@ -200,7 +219,7 @@
     if (busy) return;
     busy = '正在打开仓库';
     modal = null;
-    toast = null;
+    clearNotices();
     try {
       const next = await request<Snapshot>({ command: 'open', path }, null);
       diffSequence++;
@@ -233,7 +252,7 @@
 
   async function browse() {
     if (!native) {
-      notify('浏览器仅支持界面演示。请运行 gitpane 桌面应用来打开本地仓库。');
+      notify('浏览器仅支持界面演示。请运行 gitpane 桌面应用来打开本地仓库。', false, true);
       return;
     }
     try {
@@ -262,7 +281,7 @@
     currentCommit = null;
     modal = null;
     commitMessage = '';
-    toast = null;
+    clearNotices();
     chooseNextFile();
   }
 
@@ -333,11 +352,11 @@
   async function mutate(action: Mutation, label: string) {
     if (!repo || busy || refreshing) return false;
     if (demo) {
-      notify('当前是只读演示，请打开本地仓库以执行 Git 操作。');
+      notify('当前是只读演示，请打开本地仓库以执行 Git 操作。', false, true);
       return;
     }
     busy = label;
-    toast = null;
+    clearNotices();
     try {
       const result = await request<string>({ command: 'mutate', action }, repo.root);
       if (action.kind === 'commit') commitMessage = '';
@@ -584,7 +603,8 @@
       cleanups.forEach((fn) => fn());
       window.removeEventListener('focus', focus);
       clearTimeout(refreshTimer);
-      clearTimeout(toastTimer);
+      for (const timer of noticeTimers.values()) clearTimeout(timer);
+      noticeTimers.clear();
     };
   });
 </script>
@@ -1004,14 +1024,33 @@
   </div>
 {/if}
 
-{#if toast}
-  <div class="toast" class:error={toast.error} role={toast.error ? 'alert' : 'status'}>
-    {#if toast.error}<WarningCircle size={19} />{:else}<CheckCircle size={19} />{/if}
-    <div>
-      <strong>{toast.error ? '操作未完成' : 'gitpane'}</strong>
-      <p>{toast.text}</p>
-    </div>
-    <button class="icon-button" onclick={() => (toast = null)} aria-label="关闭提示"><X size={15} /></button>
+{#if notices.length}
+  <div class="notice-rail" aria-label="通知">
+    {#each notices as notice (notice.id)}
+      <div
+        class="notice-strip"
+        class:error={notice.kind === 'error'}
+        class:info={notice.kind === 'info'}
+        role={notice.kind === 'error' ? 'alert' : 'status'}
+      >
+        <span class="notice-tag">
+          {#if notice.kind === 'error'}<WarningCircle
+              size={16}
+              weight="bold"
+            />错误{:else if notice.kind === 'info'}<Info size={16} weight="bold" />提示{:else}<Check
+              size={16}
+              weight="bold"
+            />成功{/if}
+        </span>
+        <p title={notice.text}>{notice.text}</p>
+        <button
+          class="icon-button notice-close"
+          onclick={() => dismissNotice(notice.id)}
+          aria-label="关闭通知"
+          title="关闭通知"><X size={15} /></button
+        >
+      </div>
+    {/each}
   </div>
 {/if}
 

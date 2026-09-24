@@ -1380,51 +1380,92 @@ kbd {
 .recent-item:hover {
   background: var(--hover);
 }
-.toast {
+.notice-rail {
   position: fixed;
-  bottom: 47px;
-  right: 26px;
-  width: min(500px, calc(100vw - 50px));
+  top: 68px;
+  right: 0;
+  width: min(300px, 100vw);
+  max-height: calc(100dvh - 80px);
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 17px;
-  background: var(--panel);
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-card);
-  box-shadow: 0 8px 35px #0003;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px 0 10px 10px;
   z-index: 60;
+  pointer-events: none;
 }
-.toast > svg {
-  color: var(--accent);
-  margin-top: 1px;
+.notice-strip {
+  --notice-tone: var(--positive);
+  --notice-wash: var(--added);
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px 9px 6px 7px;
+  background: linear-gradient(90deg, var(--notice-wash), var(--panel) 82%);
+  border: 1px solid var(--notice-tone);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  box-shadow: 0 9px 26px #08061155;
+  pointer-events: auto;
+  animation: notice-slide-in 260ms cubic-bezier(0.18, 0.75, 0.27, 1) both;
 }
-.toast.error {
-  border-color: var(--error-border);
+.notice-strip.info {
+  --notice-tone: var(--branch);
+  --notice-wash: #59dce729;
 }
-.toast.error > svg {
-  color: var(--red);
+.notice-strip.error {
+  --notice-tone: var(--red);
+  --notice-wash: var(--removed);
 }
-.toast > div {
-  flex: 1;
-  min-width: 0;
-}
-.toast strong {
-  font-size: 12px;
-  font-weight: 500;
-}
-.toast p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 200px;
-  overflow: auto;
+.notice-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 60px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--notice-tone);
+  color: var(--notice-ink);
   font-size: 11px;
-  color: var(--muted);
-  line-height: 1.8;
-  margin-top: 6px;
+  font-weight: 700;
+  white-space: nowrap;
 }
-.toast > .icon-button {
-  margin-top: -4px;
+.notice-strip p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.notice-close {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+@keyframes notice-slide-in {
+  from {
+    opacity: 0.5;
+    transform: translateX(105%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notice-strip {
+    animation: none;
+  }
 }
 .modal-backdrop {
   position: fixed;

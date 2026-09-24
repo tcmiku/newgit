@@ -44,6 +44,7 @@
   --welcome-glow: #b47aff33;
   --branch: #59dce7;
   --positive: #7de8c3;
+  --notice-ink: #17212a;
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -88,4 +89,5 @@
   --welcome-glow: #b47aff33;
   --branch: #007f93;
   --positive: #117451;
+  --notice-ink: #ffffff;
 }
