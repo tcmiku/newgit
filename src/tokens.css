@@ -45,6 +45,9 @@
   --branch: #59dce7;
   --positive: #7de8c3;
   --notice-ink: #17212a;
+  --surface-raised: #2b2642;
+  --surface-inset: #1b172d;
+  --surface-shadow: #08051038;
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -90,4 +93,7 @@
   --branch: #007f93;
   --positive: #117451;
   --notice-ink: #ffffff;
+  --surface-raised: #fffaff;
+  --surface-inset: #eee7f8;
+  --surface-shadow: #56447818;
 }

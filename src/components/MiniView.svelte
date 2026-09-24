@@ -162,7 +162,7 @@
     margin: auto;
     display: flex;
     flex-direction: column;
-    background: radial-gradient(circle at 0 0, #b899ff16, transparent 44%), var(--panel);
+    background: var(--panel);
     overflow: hidden;
   }
   header {
@@ -170,13 +170,17 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     background: var(--topbar);
   }
   .repository {
     min-width: 0;
-    padding: 0;
+    padding: 4px 7px 4px 3px;
+    border-radius: var(--radius-control);
+  }
+  .repository:hover {
+    background: var(--hover);
   }
   .mini-brand {
     width: 28px;
@@ -198,14 +202,24 @@
   }
   .tools {
     display: flex;
-    gap: 8px;
-    padding: 14px 16px;
+    gap: 6px;
+    margin: 12px 13px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--surface-raised);
+    box-shadow: 0 3px 12px var(--surface-shadow);
   }
   .branch {
     flex: 1;
     min-width: 0;
     justify-content: flex-start;
     color: var(--branch);
+    padding: 0 8px;
+    border-radius: 8px;
+  }
+  .branch:hover {
+    background: var(--hover);
   }
   .branch span {
     overflow: hidden;
@@ -216,6 +230,9 @@
     height: 35px;
     padding: 0;
     font-size: 12px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
   }
   .tools .secondary:nth-child(2) {
     color: var(--branch);
@@ -230,11 +247,15 @@
     background: #ff77aa19;
   }
   .notice {
-    margin: 0 16px 10px;
+    margin: 0 14px 10px;
+    padding: 7px 9px;
     font-size: 11px;
-    line-height: 1.6;
+    line-height: 1.4;
     color: var(--muted);
     overflow-wrap: anywhere;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-raised);
   }
   .warning {
     color: var(--warm);
@@ -244,12 +265,13 @@
     min-height: 60px;
     overflow: auto;
     border-top: 1px solid var(--border);
+    background: var(--surface-inset);
   }
   .list-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px 6px;
+    padding: 11px 16px 6px;
     color: var(--muted);
     font-size: 11px;
   }
@@ -265,9 +287,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 5px 11px;
-    margin: 2px 5px;
+    padding: 5px 10px;
+    margin: 2px 8px;
     border-radius: var(--radius-control);
+    background: var(--panel);
+    border: 1px solid var(--border);
   }
   .mini-file:hover {
     background: var(--hover);
@@ -297,13 +321,15 @@
     display: flex;
     flex-direction: column;
     gap: 9px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     border-top: 1px solid var(--border);
+    background: var(--panel);
   }
   textarea {
     padding: 10px;
     resize: none;
     min-height: 72px;
+    background: var(--surface-inset);
   }
   form .primary {
     width: 100%;

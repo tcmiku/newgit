@@ -2107,3 +2107,292 @@ kbd {
     height: 33px;
   }
 }
+
+/* Fluent-inspired component hierarchy, kept native to gitpane's compact webview. */
+.activity-bar {
+  gap: 20px;
+  background: var(--rail);
+}
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--surface-raised);
+  box-shadow: 0 4px 14px var(--surface-shadow);
+}
+.brand-mark:hover {
+  background: var(--hover);
+}
+.brand-mark img {
+  width: 34px;
+  height: 34px;
+}
+.activity-main,
+.activity-bottom {
+  gap: 5px;
+}
+.activity-main > button,
+.activity-bottom > button {
+  width: 42px;
+  height: 42px;
+  color: var(--muted);
+  border-radius: 12px;
+}
+.activity-main > button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.activity-main > button.active:before {
+  left: -8px;
+  width: 3px;
+  height: 25px;
+  box-shadow: 0 0 10px var(--accent-border);
+}
+.topbar {
+  background: var(--topbar);
+  gap: 10px;
+}
+.repo-switcher {
+  max-width: min(32%, 280px);
+  padding: 5px 10px 5px 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 7px var(--surface-shadow);
+}
+.repo-switcher:hover {
+  border-color: var(--border-strong);
+}
+.repo-avatar {
+  background: var(--avatar);
+  border-color: var(--border-strong);
+}
+.topbar-branch {
+  min-width: 0;
+  max-width: 230px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--branch);
+  background: var(--surface-raised);
+  font-size: 11px;
+}
+.topbar-branch span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-branch > svg:last-child {
+  color: var(--faint);
+}
+.topbar-branch:not(:disabled):hover {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+.remote-actions {
+  gap: 5px;
+}
+.remote-actions button,
+.remote-actions button + button {
+  width: 35px;
+  height: 35px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+}
+.remote-actions button:nth-child(1),
+.remote-actions button:nth-child(2),
+.remote-actions button:nth-child(4),
+.remote-actions button:nth-child(5) {
+  background: transparent;
+  color: var(--muted);
+}
+.remote-actions button:nth-child(3) {
+  margin-left: 5px;
+  border-left-color: var(--border);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+.remote-actions button:not(:disabled):hover {
+  background: var(--hover);
+  border-color: var(--border);
+}
+.remote-actions .pull-action {
+  color: var(--branch) !important;
+  background: #59dce719 !important;
+}
+.remote-actions .push-action {
+  color: var(--positive) !important;
+  background: #7de8c319 !important;
+}
+.remote-actions .sync-action:not(:disabled):hover {
+  border-color: currentColor;
+}
+.workspace-content {
+  grid-template-columns: 306px minmax(0, 1fr);
+}
+.source-panel {
+  background: var(--panel);
+}
+.source-heading {
+  height: 53px;
+}
+.source-heading h1 {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.source-tabs {
+  height: 38px;
+  margin: 0 13px 10px;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-inset);
+}
+.source-tabs button {
+  flex: 1;
+  height: 30px;
+  gap: 5px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.source-tabs button.active {
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 2px 6px var(--surface-shadow);
+}
+.source-tabs button.active:after {
+  display: none;
+}
+.source-tabs button:not(.active):hover {
+  background: var(--hover);
+}
+.commit-box {
+  margin: 0 13px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: 0 3px 12px var(--surface-shadow);
+}
+.commit-box textarea {
+  min-height: 67px;
+  padding: 9px 10px;
+  border-color: var(--border);
+  background: var(--surface-inset);
+}
+.commit-button {
+  min-height: 34px;
+  margin-top: 8px;
+}
+.file-filter {
+  height: 34px;
+  margin: 0 13px 9px;
+  background: var(--surface-inset);
+}
+.file-filter:focus-within {
+  border-color: var(--accent-border);
+}
+.group-heading {
+  height: 34px;
+}
+.unstaged-heading {
+  margin-top: 14px;
+}
+.file-row {
+  height: 40px;
+  border-radius: var(--radius-control);
+  contain-intrinsic-size: auto 40px;
+}
+.file-row.selected {
+  background: var(--selected);
+  border-left-width: 3px;
+}
+.file-row:focus-within {
+  outline: 1px solid var(--accent-border);
+  outline-offset: -1px;
+}
+.review-heading {
+  min-height: 57px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.secondary {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px var(--surface-shadow);
+}
+.secondary:not(:disabled):hover {
+  border-color: var(--border-strong);
+}
+.modal {
+  background: var(--panel);
+  box-shadow:
+    0 20px 70px #08051066,
+    0 0 0 1px var(--surface-shadow);
+}
+.modal-title {
+  min-height: 58px;
+  padding: 12px 18px;
+  background: var(--surface-raised);
+}
+.modal-title > span {
+  font-weight: 650;
+}
+.modal-search {
+  margin: 12px 14px 2px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-inset);
+}
+.command-list {
+  padding: 8px 14px 14px;
+}
+.command-item {
+  min-height: 40px;
+  padding: 9px 12px;
+}
+.command-item:hover,
+.recent-item:hover {
+  background: var(--hover);
+}
+.command-item.current {
+  opacity: 1;
+  color: var(--branch);
+  background: #59dce716;
+}
+.notice-rail {
+  top: 64px;
+}
+@media (max-width: 1100px) {
+  .workspace-content {
+    grid-template-columns: 270px minmax(0, 1fr);
+  }
+  .topbar-branch {
+    max-width: 150px;
+  }
+}
+@media (max-width: 760px) {
+  .workspace-content {
+    grid-template-columns: 225px minmax(0, 1fr);
+  }
+  .topbar-branch {
+    max-width: 105px;
+    padding: 0 7px;
+  }
+  .topbar-branch > svg:last-child,
+  .source-tabs button span {
+    display: none;
+  }
+  .source-tabs {
+    margin: 0 8px 9px;
+  }
+  .commit-box {
+    margin: 0 8px 10px;
+  }
+  .file-filter {
+    margin: 0 8px 8px;
+  }
+}

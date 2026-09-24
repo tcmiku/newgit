@@ -192,14 +192,15 @@
     border-right: 1px solid var(--border);
   }
   .graph-titlebar {
-    height: 78px;
+    height: 58px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    padding: 0 22px;
+    padding: 0 17px;
     border-bottom: 1px solid var(--border);
+    background: var(--panel);
   }
   .graph-kicker {
     font:
@@ -209,9 +210,9 @@
     color: var(--faint);
   }
   h2 {
-    margin: 5px 0 0;
-    font-size: 19px;
-    font-weight: 500;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 650;
   }
   .graph-options {
     display: flex;
@@ -233,7 +234,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     color: var(--text);
-    background: var(--panel);
+    background: var(--surface-raised);
     padding: 6px;
     font: inherit;
   }
@@ -247,14 +248,20 @@
     color: var(--text);
   }
   .graph-search {
-    height: 44px;
+    height: 34px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 0 21px;
-    border-bottom: 1px solid var(--border);
+    margin: 10px 15px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
     color: var(--faint);
+  }
+  .graph-search:focus-within {
+    border-color: var(--accent-border);
   }
   .graph-search input {
     flex: 1;

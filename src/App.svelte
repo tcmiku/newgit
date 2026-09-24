@@ -690,15 +690,18 @@
           onclick={() => changeView('changes')}
           title="变更"
           aria-label="变更"
-          ><GitBranch size={23} weight="light" />{#if repo?.files.length}<span class="activity-dot"
-            ></span>{/if}</button
+          ><GitBranch
+            size={23}
+            weight={view === 'changes' ? 'fill' : 'regular'}
+          />{#if repo?.files.length}<span class="activity-dot"></span>{/if}</button
         >
         <button
           class:active={view === 'history'}
           disabled={!repo}
           onclick={() => changeView('history')}
           title="提交历史"
-          aria-label="提交历史"><ClockCounterClockwise size={23} weight="light" /></button
+          aria-label="提交历史"
+          ><ClockCounterClockwise size={23} weight={view === 'history' ? 'fill' : 'regular'} /></button
         >
         <button onclick={() => showModal('repository')} title="仓库" aria-label="仓库"
           ><FolderOpen size={23} weight="light" /></button
@@ -735,6 +738,14 @@
           <span>{repo?.name ?? 'gitpane'}</span>
           <CaretDown size={13} />
         </button>
+        {#if repo}<button
+            class="topbar-branch"
+            onclick={() => showModal('branches')}
+            disabled={!!busy || refreshing}
+            title={`切换分支：${repo.branch}`}
+            aria-label={`切换分支，当前为 ${repo.branch}`}
+            ><GitBranch size={15} weight="bold" /><span>{repo.branch}</span><CaretDown size={11} /></button
+          >{/if}
         <div class="remote-actions">
           <button
             onclick={toggleMini}
@@ -759,6 +770,7 @@
             onclick={() => mutate({ kind: 'remote', operation: 'pull' }, '正在 Pull')}
             title="拉取（仅快进）"
             aria-label="Pull"
+            class="sync-action pull-action"
             ><ArrowDown size={18} />{#if repo?.behind}<span>{repo.behind}</span>{/if}</button
           >
           <button
@@ -769,6 +781,7 @@
                 : showModal('remotes')}
             title={repo && !repo.upstream ? '发布分支' : '推送当前分支'}
             aria-label={repo && !repo.upstream ? '发布分支' : 'Push'}
+            class="sync-action push-action"
             ><ArrowUp size={18} />{#if repo?.ahead}<span>{repo.ahead}</span>{/if}</button
           >
         </div>
@@ -827,11 +840,11 @@
                   class:active={view === 'changes'}
                   onclick={() => changeView('changes')}
                   title="变更"
-                  aria-label="变更"><FileCode size={17} /></button
+                  aria-label="变更"><FileCode size={17} /><span>变更</span></button
                 ><button onclick={() => changeView('history')} title="提交图" aria-label="提交图"
-                  ><GitCommit size={17} /></button
+                  ><GitCommit size={17} /><span>提交图</span></button
                 ><button onclick={openGitLog} title="Git 日志" aria-label="Git 日志"
-                  ><Command size={17} /></button
+                  ><Command size={17} /><span>日志</span></button
                 >
               </div>
               {#if view === 'changes'}
@@ -1156,6 +1169,7 @@
         <div class="command-list">
           {#each branches.filter((b) => b.name.toLowerCase().includes(query.toLowerCase())) as branch}<button
               class="command-item"
+              class:current={branch.current}
               disabled={branch.current || !!busy || demo}
               onclick={() =>
                 mutate({ kind: 'switchBranch', name: branch.name, create: false }, '正在切换分支')}

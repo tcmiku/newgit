@@ -64,18 +64,19 @@
     background: var(--editor);
   }
   .git-log-header {
-    min-height: 78px;
+    min-height: 58px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 0 22px;
+    padding: 0 17px;
     border-bottom: 1px solid var(--border);
+    background: var(--panel);
   }
   h2 {
-    margin: 5px 0 0;
-    font-size: 19px;
-    font-weight: 500;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 650;
   }
   .toolbar {
     display: flex;
@@ -97,7 +98,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     color: var(--text);
-    background: var(--panel);
+    background: var(--surface-raised);
     padding: 6px;
     font: inherit;
   }
