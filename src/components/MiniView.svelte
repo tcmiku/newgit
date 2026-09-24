@@ -28,6 +28,7 @@
     onexpand,
     onbranches,
     onremotes,
+    onsettings,
     onpull,
     onpush,
     oncommit,
@@ -48,6 +49,7 @@
     onexpand: () => void;
     onbranches: () => void;
     onremotes: () => void;
+    onsettings: () => void;
     onpull: () => void;
     onpush: () => void;
     oncommit: () => void;
@@ -77,6 +79,9 @@
         title="只在 macOS 菜单栏显示"
         aria-label="移至菜单栏"><ArrowSquareOut size={17} /></button
       >{/if}
+    <button class="icon-button" onclick={onsettings} title="应用设置" aria-label="应用设置"
+      ><GearSix size={18} /></button
+    >
     <button
       class="icon-button"
       onclick={onexpand}
@@ -157,7 +162,12 @@
     </section>
   {/if}
   <footer aria-live="polite">
-    <span class="local-dot"></span>{busy || (refreshing ? '正在刷新…' : demo ? '只读演示' : '就绪')}
+    <span
+      class="local-dot"
+      role="img"
+      aria-label={demo ? '只读演示' : '就绪'}
+      title={demo ? '只读演示' : '就绪'}
+    ></span>{busy || (refreshing ? '正在刷新…' : demo ? '只读演示' : '')}
     {#if menuBar}<button class="quit-button" onclick={onquit}>退出</button>{/if}
   </footer>
 </main>

@@ -33,6 +33,8 @@
     GearSix,
     ArrowSquareOut,
     ArrowsInSimple,
+    TrayArrowDown,
+    Power,
   } from 'phosphor-svelte';
   import GraphView from './components/GraphView.svelte';
   import GitLogView from './components/GitLogView.svelte';
@@ -165,6 +167,11 @@
   let autoHistory = false;
   let mode = $state(readSetting<string>('diff-mode', 'split'));
   let theme = $state(readSetting<string>('theme', 'dark'));
+  type CloseBehavior = 'tray' | 'quit';
+  let closeBehavior = $state<CloseBehavior>(
+    readSetting<string>('close-behavior', 'tray') === 'quit' ? 'quit' : 'tray',
+  );
+  let closeSettingBusy = $state(false);
   let filter = $state('');
   let commitMessage = $state('');
   let recents = $state<string[]>(readSetting<string[]>('recents', []));
@@ -182,7 +189,7 @@
   let remotesError = $state('');
   let branches = $state<Branch[]>([]);
   let branchesLoading = $state(false);
-  let modal = $state<'repository' | 'branches' | 'commands' | 'help' | 'remotes' | null>(null);
+  let modal = $state<'repository' | 'branches' | 'commands' | 'help' | 'remotes' | 'settings' | null>(null);
   let query = $state('');
   let pathInput = $state('');
   let newBranch = $state('');
@@ -241,13 +248,30 @@
       );
   }
 
+  async function chooseCloseBehavior(next: CloseBehavior) {
+    if (closeSettingBusy || closeBehavior === next) return;
+    closeSettingBusy = true;
+    try {
+      if (native) await invoke('set_close_behavior', { exitOnClose: next === 'quit' });
+      closeBehavior = next;
+      saveSetting('close-behavior', next);
+    } catch (e) {
+      notify(`无法保存关闭行为：${String(e)}`, true);
+    } finally {
+      closeSettingBusy = false;
+    }
+  }
+
   async function showModal(kind: typeof modal) {
     modal = kind;
     query = '';
     newBranch = '';
     pathInput = '';
     await tick();
-    (dialogElement?.querySelector<HTMLElement>('input:not(:disabled)') ?? dialogElement)?.focus();
+    (
+      dialogElement?.querySelector<HTMLElement>('input:not(:disabled), .close-option:not(:disabled)') ??
+      dialogElement
+    )?.focus();
     if (kind === 'remotes') await loadRemotes();
     if (kind === 'branches' && repo) {
       branchesLoading = true;
@@ -609,6 +633,7 @@
     { label: '查看提交历史', key: '', run: () => changeView('history') },
     { label: '打开 Git 日志', key: '', run: openGitLog },
     { label: '远程仓库设置', key: '', run: () => showModal('remotes') },
+    { label: '应用设置', key: '', run: () => showModal('settings') },
     { label: '切换分支', key: '', run: () => showModal('branches') },
     { label: '切换明暗主题', key: '', run: () => (theme = theme === 'dark' ? 'light' : 'dark') },
   ];
@@ -677,6 +702,9 @@
     const focus = () => scheduleRefresh(true);
     window.addEventListener('focus', focus);
     if (native) {
+      void invoke('set_close_behavior', { exitOnClose: closeBehavior === 'quit' }).catch((e) =>
+        notify(`无法读取关闭行为：${String(e)}`, true),
+      );
       void (async () => {
         saveSetting('menu-bar-mode', false);
         const restore = await listen('menu-bar-restored', () => {
@@ -799,6 +827,7 @@
     onhide={() => invoke('hide_menu_bar_panel')}
     onbranches={() => showModal('branches')}
     onremotes={() => showModal('remotes')}
+    onsettings={() => showModal('settings')}
     onpull={() => mutate({ kind: 'remote', operation: 'pull' }, '正在拉取')}
     onpush={() =>
       repo?.upstream ? mutate({ kind: 'remote', operation: 'push' }, '正在推送') : showModal('remotes')}
@@ -840,6 +869,9 @@
         >
       </div>
       <div class="activity-bottom">
+        <button onclick={() => showModal('settings')} title="应用设置" aria-label="应用设置"
+          ><GearSix size={21} weight="light" /></button
+        >
         <button onclick={() => showModal('commands')} title="命令面板" aria-label="命令面板"
           ><Command size={21} /></button
         >
@@ -1185,7 +1217,12 @@
         </div>
         <div class="status-message" aria-live="polite">
           {#if busy || refreshing}<ArrowsClockwise size={12} class="spinning" />{busy ||
-              '正在刷新'}{:else}<span class="local-dot"></span>{demo ? '只读演示' : '就绪'}{/if}
+              '正在刷新'}{:else}<span
+              class="local-dot"
+              role="img"
+              aria-label={demo ? '只读演示' : '就绪'}
+              title={demo ? '只读演示' : '就绪'}
+            ></span>{#if demo}只读演示{/if}{/if}
         </div>
       </footer>
     </div>
@@ -1242,19 +1279,23 @@
       aria-modal="true"
       aria-label={modal === 'remotes'
         ? '远程仓库设置'
-        : modal === 'branches'
-          ? '切换分支'
-          : modal === 'commands'
-            ? '命令面板'
-            : modal === 'help'
-              ? '快捷键与关于'
-              : '打开仓库'}
+        : modal === 'settings'
+          ? '应用设置'
+          : modal === 'branches'
+            ? '切换分支'
+            : modal === 'commands'
+              ? '命令面板'
+              : modal === 'help'
+                ? '快捷键与关于'
+                : '打开仓库'}
       tabindex="-1"
       bind:this={dialogElement}
     >
       <div class="modal-title">
         <span
-          >{#if modal === 'remotes'}<GearSix size={19} />远程{:else if modal === 'branches'}<GitBranch
+          >{#if modal === 'remotes'}<GearSix size={19} />远程{:else if modal === 'settings'}<GearSix
+              size={19}
+            />设置{:else if modal === 'branches'}<GitBranch
               size={19}
             />分支{:else if modal === 'commands'}<Command size={19} />命令{:else if modal === 'help'}<Keyboard
               size={19}
@@ -1276,6 +1317,32 @@
           onaction={mutate}
           onrefresh={loadRemotes}
         />
+      {:else if modal === 'settings'}
+        <div class="modal-body settings-body">
+          <div class="settings-caption">点击关闭按钮时</div>
+          <div class="close-options" role="group" aria-label="关闭按钮行为">
+            <button
+              class="close-option"
+              class:chosen={closeBehavior === 'tray'}
+              aria-pressed={closeBehavior === 'tray'}
+              disabled={closeSettingBusy}
+              onclick={() => chooseCloseBehavior('tray')}
+              ><span class="close-option-icon"><TrayArrowDown size={20} /></span><span
+                class="close-option-copy"><strong>收起到托盘</strong><small>后台继续运行</small></span
+              >{#if closeBehavior === 'tray'}<Check size={17} weight="bold" />{/if}</button
+            >
+            <button
+              class="close-option"
+              class:chosen={closeBehavior === 'quit'}
+              aria-pressed={closeBehavior === 'quit'}
+              disabled={closeSettingBusy}
+              onclick={() => chooseCloseBehavior('quit')}
+              ><span class="close-option-icon"><Power size={20} /></span><span class="close-option-copy"
+                ><strong>直接退出</strong><small>关闭程序进程</small></span
+              >{#if closeBehavior === 'quit'}<Check size={17} weight="bold" />{/if}</button
+            >
+          </div>
+        </div>
       {:else if modal === 'repository'}
         <div class="modal-body">
           <label for="repo-path">仓库路径</label>

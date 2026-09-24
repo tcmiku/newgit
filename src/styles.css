@@ -2329,6 +2329,70 @@ kbd {
 .modal-title > span {
   font-weight: 650;
 }
+.settings-body {
+  padding: 18px;
+}
+.settings-caption {
+  margin: 0 0 10px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.close-options {
+  display: grid;
+  gap: 8px;
+}
+.close-option {
+  width: 100%;
+  min-height: 62px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  text-align: left;
+}
+.close-option:not(:disabled):hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+.close-option.chosen {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+.close-option-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--surface-inset);
+  color: var(--branch);
+}
+.close-option:nth-child(2) .close-option-icon {
+  color: var(--red);
+}
+.close-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.close-option-copy strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.close-option-copy small {
+  color: var(--faint);
+  font-size: 10px;
+}
+.close-option > svg:last-child {
+  color: var(--accent);
+}
 .modal-search {
   margin: 12px 14px 2px;
   padding: 6px 11px;

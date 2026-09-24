@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 use tauri::Emitter;
@@ -28,6 +31,11 @@ struct Repository {
 }
 
 type Shared = Arc<Mutex<Repository>>;
+
+#[derive(Default)]
+struct CloseBehaviorState {
+    exit_on_close: AtomicBool,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -274,6 +282,11 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn set_close_behavior(exit_on_close: bool, state: tauri::State<'_, CloseBehaviorState>) {
+    state.exit_on_close.store(exit_on_close, Ordering::SeqCst);
+}
+
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn open_from_tray(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -325,7 +338,16 @@ fn hide_on_close(window: &tauri::Window, event: &WindowEvent) {
     if window.label() == "main" {
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            let _ = window.hide();
+            if window
+                .app_handle()
+                .state::<CloseBehaviorState>()
+                .exit_on_close
+                .load(Ordering::SeqCst)
+            {
+                window.app_handle().exit(0);
+            } else {
+                let _ = window.hide();
+            }
         }
     }
 }
@@ -334,6 +356,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Shared::default())
+        .manage(CloseBehaviorState::default())
         .setup(|app| {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             setup_system_tray(app)?;
@@ -354,7 +377,8 @@ pub fn run() {
             launch_path,
             set_menu_bar_mode,
             hide_menu_bar_panel,
-            quit_app
+            quit_app,
+            set_close_behavior
         ])
         .build(tauri::generate_context!())
         .expect("Unable to start gitpane")
